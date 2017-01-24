@@ -1,0 +1,74 @@
+#!/usr/bin/env python
+
+
+# MIT License
+# 
+# Copyright (c) 2017 Institut National de la Recherche Agronomique
+# 
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+# 
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+# 
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+
+from optparse import OptionParser
+from obo import *
+from sys import stdout
+
+def _depth(term):
+    return len(list(term.ancestors()))
+
+def _cmp(t1, t2):
+    return _depth(t1) - _depth(t2)
+
+class OBORenum(OptionParser):
+    def __init__(self):
+        OptionParser.__init__(self, usage='usage: %prog [options]')
+        self.add_option('--prefix', action='store', default='RENUM', dest='prefix', help='')
+        self.add_option('--digits', action='store', type='int', default=6, dest='digits', help='')
+        self.add_option('--mapping-file', action='store', dest='mapping_file', help='')
+
+    def run(self):
+        options, args = self.parse_args()
+        onto = Ontology()
+        onto.load_files(UnhandledTagFail(), DeprecatedTagWarn(), *args)
+        onto.check_required()
+        onto.resolve_references(DanglingReferenceFail(), DanglingReferenceWarn())
+
+        terms = [term for term in onto.iterterms() if not(isinstance(term, BuiltinStanza) or term.source == '<<builtin>>')]
+        terms.sort(cmp=_cmp)
+        format = '%s:%%0%dd' % (options.prefix, options.digits)
+        mapping = dict((term.id.value, format % n) for n, term in enumerate(terms))
+
+        onto.write_obo(stdout)
+        for stanza in onto.stanzas.itervalues():
+            if isinstance(stanza, BuiltinStanza) or stanza.source == '<<builtin>>':
+                continue
+            if stanza.id.value in mapping:
+                stanza.id.value = mapping[stanza.id.value]
+            for links in stanza.references.itervalues():
+                for link in links:
+                    if link.reference in mapping:
+                        link.reference = mapping[link.reference]
+            stanza.write_obo(stdout)
+
+        if options.mapping_file is not None:
+            f = open(options.mapping_file, 'w')
+            for p in mapping.iteritems():
+                f.write('%s\t%s\n' % p)
+            f.close()
+
+if __name__ == '__main__':
+    OBORenum().run()
