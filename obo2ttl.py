@@ -25,22 +25,12 @@
 from obo import *
 from optparse import OptionParser
 
-LEX_STATEMENTS='''lex:synonym
-      a      rdfs:DataProperty ;
-      rdfs:domain rdfs:Class ;
-      rdfs:range xsd:string .
-
-lex:relatedSynonym rdfs:subPropertyOf lex:synonym .
-
-lex:exactSynonym rdf:subPropertyOf lex:synonym .
-'''
-
 PREFIXES = {
     'rdfs': 'http://www.w3.org/2000/01/rdf-schema#',
     'owl': 'http://www.w3.org/2002/07/owl#',
     'xsd': 'http://www.w3.org/2001/XMLSchema#',
     'rdf': 'http://www.w3.org/1999/02/22-rdf-syntax-ns#',
-    'lex': 'http://inra.fr/lexicalization.owl#'
+    'skos': 'http://www.w3.org/2004/02/skos/core#'
 }
 
 def _prefix_callback(option, opt_str, value, parser):
@@ -57,7 +47,16 @@ def _get_id(options, id):
             return '%s:%s' % (name, id[len(prefix):])
     return id
 
-class OBO2OWL(OptionParser):
+def _term_statements(options, t):
+    yield 'skos:prefLabel "%s"^^xsd:string' % t.name.value
+    for syn in t.synonyms:
+        yield 'skos:altLabel "%s"^^xsd:string' % syn.text
+    if 'is_a' in t.references:
+        for link in t.references['is_a']:
+            p = link.reference_object
+            yield 'rdfs:subClassOf %s' % _get_id(options, p.id.value)
+
+class OBO2TTL(OptionParser):
     def __init__(self):
         OptionParser.__init__(self, usage='usage: %prog [options]')
         self.add_option('--lex-statements', action='store_true', dest='lex_statements', default=False, help='')
@@ -69,7 +68,7 @@ class OBO2OWL(OptionParser):
         onto = Ontology()
         onto.load_files(UnhandledTagFail(), DeprecatedTagWarn(), *args)
         onto.check_required()
-        onto.resolve_references(DanglingReferenceFail())
+        onto.resolve_references(DanglingReferenceFail(), DanglingReferenceFail())
         for p in PREFIXES.iteritems():
             print '@prefix %s: <%s> .' % p
         if options.lex_statements:
@@ -77,15 +76,9 @@ class OBO2OWL(OptionParser):
         print
         for t in onto.iterterms():
             print _get_id(options, t.id.value)
-            print '      rdfs:label "%s"^^xsd:string' % t.name.value
-            for syn in t.synonyms:
-                print '      lex:%sSynonym "%s"^^xsd:string' % (syn.scope.lower(), syn.text)
-            if 'is_a' in t.references:
-                for link in t.references['is_a']:
-                    p = link.reference_object
-                    print '      rdfs:subClassOf %s # %s' % (_get_id(options, p.id.value), p.name.value)
-            print
+            print ' ;\n'.join(_term_statements(options, t))
+            print '.\n'
 
 
 if __name__ == '__main__':
-    OBO2OWL().run()
+    OBO2TTL().run()
