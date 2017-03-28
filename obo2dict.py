@@ -86,7 +86,7 @@ class ValueMap(object):
         if isinstance(self.item, list):
             return '/' + '/'.join(term.name.value for term in self.item)
         if isinstance(self.item, Term):
-            paths = list(term.paths(include_self=True))
+            paths = list(self.item.paths(include_self=True))
             return '/' + '/'.join(term.name.value for term in paths[0])
         raise Exception('expected list, got ' + str(self.item))
 

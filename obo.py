@@ -545,7 +545,7 @@ class StanzaReference(Sourced):
                obsolete_reference_option.handle(self, self.reference, 'reference to obsolete ') 
                # XXX check range
         else:
-            dangling_reference_option.handle(self, self.reference)
+            dangling_reference_option.handle(self, self.reference, 'reference to unknown ')
 
 class XRef(Sourced):
     def __init__(self, source, lineno, term, reference, description, match, matched):
