@@ -770,6 +770,20 @@ class Stanza(Sourced, TagSet):
                     return r
         return None
 
+    def parents(self, rel='is_a'):
+        if rel in  self.references:
+            for link in self.references[rel]:
+                yield link.reference_object
+
+    def children(self, rel='is_a'):
+        for stanza in self.ontology.stanzas.itervalues():
+            if isinstance(stanza, BuiltinStanza):
+                continue
+            for p in stanza.parents():
+                if p.id.value == self.id.value:
+                    yield stanza
+                    break
+
     def ancestors(self, rel='is_a', include_self=False):
         if include_self:
             yield self
