@@ -36,9 +36,11 @@ def _cmp(t1, t2):
 class OBORenum(OptionParser):
     def __init__(self):
         OptionParser.__init__(self, usage='usage: %prog [options]')
-        self.add_option('--prefix', action='store', default='RENUM', dest='prefix', help='')
-        self.add_option('--digits', action='store', type='int', default=6, dest='digits', help='')
-        self.add_option('--mapping-file', action='store', dest='mapping_file', help='')
+        self.add_option('--prefix', action='store', default='RENUM', dest='prefix', help='identifier prefix (default: %default)')
+        self.add_option('--digits', action='store', type='int', default=6, dest='digits', help='number of digits in generated identifiers (default: %default)')
+        self.add_option('--start', action='store', type='int', default=0, dest='start', help='first number of generated identifier (default: %default)')
+        self.add_option('--preserve', action='store_true', dest='preserve', help='preserve identifiers with the prefix')
+        self.add_option('--mapping-file', action='store', dest='mapping_file', help='write identifier mapping in this file')
 
     def run(self):
         options, args = self.parse_args()
@@ -48,9 +50,12 @@ class OBORenum(OptionParser):
         onto.resolve_references(DanglingReferenceFail(), DanglingReferenceWarn())
 
         terms = [term for term in onto.iterterms() if not(isinstance(term, BuiltinStanza) or term.source == '<<builtin>>')]
+        if not options.preserve:
+            prefix = options.prefix + ':'
+            terms = [term for term in terms if not(term.id.value.startswith(prefix))]
         terms.sort(cmp=_cmp)
         format = '%s:%%0%dd' % (options.prefix, options.digits)
-        mapping = dict((term.id.value, format % n) for n, term in enumerate(terms))
+        mapping = dict((term.id.value, format % n) for n, term in enumerate(terms, options.start))
 
         onto.write_obo(stdout)
         for stanza in onto.stanzas.itervalues():
