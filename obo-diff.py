@@ -98,43 +98,108 @@ class TermDiff:
 
     def former_children(self):
         return ', '.join(('%s (%s)' % (p.id.value, p.name.value)) for p in self.removed_children)
+
+def _term_id(term):
+    return term.id.value
+
+def _term_name(term):
+    return term.name.value
+
+def _build_name_dict(onto):
+    result = {}
+    for term in onto.iterterms():
+        name = term.name.value
+        if name in result:
+            stderr.write('terms with same name (%s): %s, %s\n' % (name, term.id.value, result[name].id.value))
+        else:
+            result[name] = term
+    return result
+
+class TermMatch:
+    def __init__(self, onto):
+        self.onto = onto
+        self.map = self._build_map(onto)
+
+    def _build_map(self, onto):
+        raise NotImplemented()
+
+    def _key(self, term):
+        raise NotImplemented()
+
+    def match(self, term):
+        key = self._key(term)
+        if key in self.map:
+            return self.map[key]
+        return None
+
+class TermIdMatch(TermMatch):
+    def __init__(self, onto):
+        TermMatch.__init__(self, onto)
+
+    def _build_map(self, onto):
+        return onto.stanzas
+
+    def _key(self, term):
+        return term.id.value
+
+class TermNameMatch(TermMatch):
+    def __init__(self, onto):
+        TermMatch.__init__(self, onto)
+
+    def _message(self, term):
+        return term.message('%s (%s)' % (term.id.value, term.name.value))
+        
+    def _build_map(self, onto):
+        result = {}
+        for term in onto.iterterms():
+            name = self._key(term)
+            if name in result:
+                stderr.write('terms with same name %s, %s\n' % (self._message(term), self._message(result[name])))
+            else:
+                result[name] = term
+        return result
+
+    def _key(self, term):
+        return term.name.value
+
+class TermNameCaseMatch(TermNameMatch):
+    def __init__(self, onto):
+        TermNameMatch.__init__(self, onto)
+
+    def _key(self, term):
+        return term.name.value.lower()
     
 class OBODiff(OptionParser):
     def __init__(self):
         OptionParser.__init__(self, usage='usage: %prog [options]')
+        self.set_defaults(term_match=TermIdMatch)
+        self.add_option('--match-name', action='store_const', dest='term_match', const=TermNameMatch, help='match term names instead of ids')
+        self.add_option('--match-name-case', action='store_const', dest='term_match', const=TermNameCaseMatch, help='match term names (case insensitive) instead of ids')
 
-    def _load_onto(self, filename):
+    def _load_term_match(self, filename, klass):
         onto = Ontology()
         onto.load_files(UnhandledTagFail(), DeprecatedTagWarn(), filename)
         onto.check_required()
         onto.resolve_references(DanglingReferenceFail(), DanglingReferenceWarn())
-        return onto
+        return klass(onto)
 
-    def _differences(self, onto1, onto2):
-        for term1 in onto1.stanzas.itervalues():
-            if not isinstance(term1, Term):
-                continue
-            termid = term1.id.value
-            if termid in onto2.stanzas:
-                term2 = onto2.stanzas[termid]
-            else:
-                term2 = None
+    def _differences(self, term_match1, term_match2):
+        for term1 in term_match1.onto.iterterms():
+            term2 = term_match2.match(term1)
             d = TermDiff(term1, term2)
             if d.changed():
                 yield d
-        for term2 in onto2.stanzas.itervalues():
-            if not isinstance(term2, Term):
-                continue
-            termid = term2.id.value
-            if termid not in onto1.stanzas:
+        for term2 in term_match2.onto.iterterms():
+            term1 = term_match1.match(term2)
+            if term1 is None:
                 yield TermDiff(None, term2)
 
     def run(self):
         options, args = self.parse_args()
         if len(args) != 2:
             raise Exception('two ontologies are required')
-        onto1, onto2 = (self._load_onto(filename) for filename in args)
-        all_diff = tuple(self._differences(onto1, onto2))
+        term_match1, term_match2 = (self._load_term_match(filename, options.term_match) for filename in args)
+        all_diff = tuple(self._differences(term_match1, term_match2))
         if not all_diff:
             stderr.write('ontologies are equivalent\n')
         else:
