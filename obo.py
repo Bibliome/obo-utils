@@ -705,7 +705,7 @@ class Stanza(Sourced, TagSet):
     def _write_obo_relations(self, out):
         for refrel in sorted(self.references, cmp=_reference_relation_comparator):
             for ref in self.references[refrel]:
-                if hasattr(ref.reference_object, 'name'):
+                if hasattr(ref, 'reference_object') and hasattr(ref.reference_object, 'name'):
                     comment = ref.reference_object.name.value
                 else:
                     comment = None
