@@ -139,6 +139,16 @@ class Chi2Cell:
     def set_direction(self):
         self.direction = cmp(self.observed, self.expected)
 
+class RealChi2Cell:
+    def __init__(self, child, expected, observed, delta, direction, pvalue):
+        self.child = child
+        self.expected = expected
+        self.observed = observed
+        self.delta = delta
+        self.direction = direction
+        self.pvalue = pvalue
+        
+        
 def test_children_chi2(node, threshold, deltafun, depth=0):
     children = tuple(child for child in node.children if child.expected() > 0)
     result = []
@@ -199,7 +209,7 @@ class HStat(OptionParser):
         hierarchy.root.cumulate()
         for cells in test_children_chi2(hierarchy.root, options.risk, options.deltafun, options.depth):
             for cell in cells:
-                print '%s\t% 2d\t%15.6f\t%8d\t%15.6f\t%f\t%s' % (cell.child.id, cell.direction, cell.delta, cell.observed, cell.expected, cell.pvalue, cell.child.name)
+                print '%s\t% 2d\t%15.6f\t%8d\t%15.6f\t%8d\t%f\t%s' % (cell.child.id, cell.direction, cell.delta, cell.observed, cell.expected, cell.child.expected(), cell.pvalue, cell.child.name)
             print
         
 
