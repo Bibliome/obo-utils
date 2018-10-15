@@ -26,8 +26,8 @@ from obo import *
 import csv
 from optparse import OptionParser
 from sys import stdin, stderr, stdout
-
-
+from datetime import datetime
+from os import getenv
 
 
 class CSV2OBO(OptionParser):
@@ -44,7 +44,7 @@ class CSV2OBO(OptionParser):
 
     def run(self):
         options, args = self.parse_args()
-        self.ontology = Ontology()
+        self.init_ontology(options)
         if len(args) == 0:
             self.load_records(options, '<stdin>', stdin)
         else:
@@ -53,11 +53,22 @@ class CSV2OBO(OptionParser):
                     self.load_records(options, filename, f)
         self.ontology.check_required()
         self.ontology.resolve_references(DanglingReferenceWarn(), DanglingReferenceWarn())
+        self.write(stdout)
+
+    def init_ontology(self, options):
+        self.ontology = Ontology()
+        header_reader = HeaderReader(self.ontology, UnhandledTagFail(), DeprecatedTagWarn())
+        header_reader.read_date(SourcedValue('<commandline>', 0, datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
+        header_reader.read_auto_generated_by(SourcedValue('<commandline>', 0, 'csv2obo.py'))
+        header_reader.read_saved_by(SourcedValue('<commandline>', 0, getenv('USER')))
+        
+    def write(self, f):
+        self.ontology.write_obo(f)
         for term in self.ontology.iterterms():
             #stderr.write('id = %s\n' % term.id.value)
-            term.write_obo(stdout)
-        stdout.write('\n')
-
+            term.write_obo(f)
+        f.write('\n')        
+        
     def load_records(self, options, filename, f):
         r = csv.reader(f, delimiter=options.delimiter)
         lineno = 0
