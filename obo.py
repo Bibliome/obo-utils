@@ -602,6 +602,7 @@ class TagSet:
             value = 'true'
         if value is False:
             return
+        value = value.replace('\n', '\\n').replace('\r', '\\n').replace('\t', '\\t')
         if quote:
             value = '"%s"' % value
         if scope:
