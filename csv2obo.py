@@ -43,51 +43,72 @@ class CSV2OBO(OptionParser):
 
     def run(self):
         options, args = self.parse_args()
-        onto = Ontology()
+        self.ontology = Ontology()
         if len(args) == 0:
-            self.load_records(options, onto, '<stdin>', stdin)
+            self.load_records(options, '<stdin>', stdin)
         else:
             for filename in args:
                 with open(filename) as f:
-                    self.load_records(options, onto, filename, f)
-        onto.check_required()
-        onto.resolve_references(DanglingReferenceWarn(), DanglingReferenceWarn())
-        for term in onto.iterterms():
+                    self.load_records(options, filename, f)
+        self.ontology.check_required()
+        self.ontology.resolve_references(DanglingReferenceWarn(), DanglingReferenceWarn())
+        for term in self.ontology.iterterms():
             #stderr.write('id = %s\n' % term.id.value)
             term.write_obo(stdout)
         stdout.write('\n')
 
-    def load_records(self, options, ontology, filename, f):
+    def load_records(self, options, filename, f):
         r = csv.reader(f, delimiter=options.delimiter)
         lineno = 0
         for row in r:
             lineno += 1
-            if lineno == 1 and options.skip_first:
-                continue
-            term_reader = TermReader(filename, lineno, ontology, UnhandledTagFail(), DeprecatedTagWarn())
-            id = row[options.id_column]
-            if id == '':
-                stderr.write('skipping line %d because id is empty\n' % lineno)
-                continue
-            #stderr.write('id = %s\n' % id)
-            term_reader.read_id(SourcedValue(filename, lineno, id))
-            name = row[options.name_column]
-            if name != '':
-                #stderr.write('name = %s\n' % name)
-                term_reader.read_name(SourcedValue(filename, lineno, name.replace('[', '(').replace(']', ')')))
-            definition = row[options.definition_column]
-            if definition != '':
-                #stderr.write('def = %s\n' % definition)
-                term_reader.read_def(SourcedValue(filename, lineno, '"%s"' % definition.replace('"', '\'')))
-            for col in options.isa_columns:
-                ref = row[col]
-                if ref != '':
-                    term_reader.read_is_a(SourcedValue(filename, lineno, ref))
-            for col in options.synonym_columns:
-                syn = row[col]
-                if syn != '':
-                    term_reader.read_synonym(SourcedValue(filename, lineno, '"%s"' % syn.replace('"', '\'')))
+            self.load_record(options, filename, lineno, row)
+        
+    def load_record(self, options, filename, lineno, row):
+        if lineno == 1 and options.skip_first:
+            return
+        term_reader = TermReader(filename, lineno, self.ontology, UnhandledTagFail(), DeprecatedTagWarn())
+        if not self.read_id(options, row, term_reader):
+            stderr.write('skipping line %d because id is empty\n' % lineno)
+            return
+        self.read_name(options, row, term_reader)
+        self.read_def(options, row, term_reader)
+        self.read_isas(options, row, term_reader)
+        self.read_synonyms(options, row, term_reader)
 
-            
+    def read_id(self, options, row, term_reader):
+        id = row[options.id_column]
+        if id == '':
+            return False
+        #stderr.write('id = %s\n' % id)
+        term_reader.read_id(SourcedValue(term_reader.source, term_reader.lineno, id))
+        return True
+        
+    def read_name(self, options, row, term_reader):
+        name = row[options.name_column]
+        if name != '':
+            #stderr.write('name = %s\n' % name)
+            name = name.replace('[', '(').replace(']', ')')
+            term_reader.read_name(SourcedValue(term_reader.source, term_reader.lineno, name))
+
+    def read_def(self, options, row, term_reader):
+        definition = row[options.definition_column]
+        if definition != '':
+            #stderr.write('def = %s\n' % definition)
+            definition = definition.replace('"', '\'')
+            term_reader.read_def(SourcedValue(term_reader.source, term_reader.lineno, '"%s"' % definition))
+
+    def read_isas(self, options, row, term_reader):
+        for col in options.isa_columns:
+            ref = row[col]
+            if ref != '':
+                term_reader.read_is_a(SourcedValue(term_reader.source, term_reader.lineno, ref))
+
+    def read_synonyms(self, options, row, term_reader):
+        for col in options.synonym_columns:
+            syn = row[col]
+            if syn != '':
+                term_reader.read_synonym(SourcedValue(term_reader.source, term_reader.lineno, '"%s"' % syn.replace('"', '\'')))
+
 if __name__ == '__main__':
     CSV2OBO().run()
