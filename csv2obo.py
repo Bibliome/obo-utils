@@ -34,7 +34,8 @@ class CSV2OBO(OptionParser):
     def __init__(self):
         OptionParser.__init__(self, usage='usage: %prog [options] [files]')
         self.add_option('--id', action='store', type='int', dest='id_column', default=None, help='term identifier column (mandatory)')
-        self.add_option('--id-prefix', action='store', type='str', dest='id_prefix', default=None, help='prepend identifier prefix (default: no prefx)')
+        self.add_option('--id-prefix', action='store', type='str', dest='id_prefix', default=None, help='prepend identifier prefix (multiple allowed, default: no prefix)')
+        self.add_option('--ignore-ref', action='append', type='str', dest='ignore_refs', default=[], help='ignore reference (default: ignore none)')
         self.add_option('--name', action='store', type='int', dest='name_column', help='term name column (default: no name)')
         self.add_option('--isa', action='append', type='int', dest='isa_columns', help='parent column (multiple allowed, default: no is_a)')
         self.add_option('--synonym', action='append', type='int', dest='synonym_columns', help='synonym column (multiple allowed, default: no synonym)')
@@ -61,11 +62,12 @@ class CSV2OBO(OptionParser):
     def init_ontology(self, options):
         self.ontology = Ontology()
         header_reader = HeaderReader(self.ontology, UnhandledTagFail(), DeprecatedTagWarn())
-        header_reader.read_date(SourcedValue('<commandline>', 0, datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
+        header_reader.read_date(SourcedValue('<commandline>', 0, datetime.now().strftime('%d:%m:%Y %H:%M')))
         header_reader.read_auto_generated_by(SourcedValue('<commandline>', 0, 'csv2obo.py'))
         header_reader.read_saved_by(SourcedValue('<commandline>', 0, getenv('USER')))
 
     def load(self, options, args):
+        options.ignore_refs = set(options.ignore_refs)
         if len(args) == 0:
             self.load_records(options, '<stdin>', stdin)
         else:
@@ -85,7 +87,6 @@ class CSV2OBO(OptionParser):
             return
         term_reader = TermReader(filename, lineno, self.ontology, UnhandledTagFail(), DeprecatedTagWarn())
         if not self.read_id(options, row, term_reader):
-            stderr.write('skipping line %d because id is empty\n' % lineno)
             return
         self.read_name(options, row, term_reader)
         self.read_def(options, row, term_reader)
@@ -102,6 +103,10 @@ class CSV2OBO(OptionParser):
     def read_id(self, options, row, term_reader):
         id = CSV2OBO.column(term_reader.source, term_reader.lineno, row, options.id_column)
         if id == '':
+            stderr.write('%s:%d id is empty\n' % (term_reader.source, term_reader.lineno))
+            return False
+        if id in options.ignore_refs:
+            stderr.write('%s:%d id is ignored (%s)\n' % (term_reader.source, term_reader.lineno, id))
             return False
         #stderr.write('id = %s\n' % id)
         id = self.get_ref(options, id)
@@ -127,20 +132,25 @@ class CSV2OBO(OptionParser):
         if definition != '':
             #stderr.write('def = %s\n' % definition)
             definition = definition.replace('"', '\'')
-            term_reader.read_def(SourcedValue(term_reader.source, term_reader.lineno, '"%s"' % definition))
+            term_reader.read_def(SourcedValue(term_reader.source, term_reader.lineno, '"%s" [%s]' % (definition, term_reader.stanza.id.value)))
 
     def read_isas(self, options, row, term_reader):
         for col in options.isa_columns:
             ref = CSV2OBO.column(term_reader.source, term_reader.lineno, row, col)
-            if ref != '':
-                ref = self.get_ref(options, ref)
-                term_reader.read_is_a(SourcedValue(term_reader.source, term_reader.lineno, ref))
+            if ref == '':
+                continue
+            if ref in options.ignore_refs:
+                stderr.write('%s:%d ref is ignored (%s)\n' % (term_reader.source, term_reader.lineno, ref))
+                continue
+            ref = self.get_ref(options, ref)
+            term_reader.read_is_a(SourcedValue(term_reader.source, term_reader.lineno, ref))
 
     def read_synonyms(self, options, row, term_reader):
         for col in options.synonym_columns:
             syn = CSV2OBO.column(term_reader.source, term_reader.lineno, row, col)
             if syn != '':
-                term_reader.read_synonym(SourcedValue(term_reader.source, term_reader.lineno, '"%s"' % syn.replace('"', '\'')))
+                syn = syn.replace('"', '\'')
+                term_reader.read_synonym(SourcedValue(term_reader.source, term_reader.lineno, '"%s" [%s]' % (syn, term_reader.stanza.id.value)))
 
     def write(self, f):
         self.ontology.write_obo(f)
