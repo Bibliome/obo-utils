@@ -23,7 +23,7 @@
 # SOFTWARE.
 
 from optparse import OptionParser
-from obo import Ontology, OntologyReader, UnhandledTagFail, DanglingReferenceFail, DeprecatedTagSilent
+from obo import Ontology, OntologyReader, UnhandledTagFail, DanglingReferenceFail, DanglingReferenceWarn, DeprecatedTagSilent
 
 class Wang_Normalization(dict):
     def __init__(self, ontology, weight):
@@ -89,7 +89,7 @@ class Wang(OptionParser):
         onto = Ontology()
         onto.load_files(UnhandledTagFail(), DeprecatedTagSilent(), *args)
         onto.check_required()
-        onto.resolve_references(DanglingReferenceFail())
+        onto.resolve_references(DanglingReferenceFail(), DanglingReferenceWarn())
         wang = Wang_Normalization(onto, options.weight)
         for term1 in onto.iterterms():
             for term2 in onto.iterterms():
