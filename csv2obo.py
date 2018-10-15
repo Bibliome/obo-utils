@@ -32,19 +32,21 @@ from os import getenv
 
 class CSV2OBO(OptionParser):
     def __init__(self):
-        OptionParser.__init__(self, usage='usage: %prog [options]')
-        self.add_option('--id', action='store', type='int', dest='id_column', help='term identifier column')
-        self.add_option('--id-prefix', action='store', type='str', dest='id_prefix', default=None, help='prepend identifier prefix')
-        self.add_option('--name', action='store', type='int', dest='name_column', help='term name column')
-        self.add_option('--isa', action='append', type='int', dest='isa_columns', help='parent column (multiple allowed)')
-        self.add_option('--synonym', action='append', type='int', dest='synonym_columns', help='synonym column (multiple allowed)')
-        self.add_option('--definition', action='store', type='int', dest='definition_column', help='definition column')
-        self.add_option('--delimiter', action='store', type='string', dest='delimiter', default='\t', help='field delimiter')
-        self.add_option('--skip-first', action='store_true', dest='skip_first', default=False, help='skip first record')
-        self.add_option('--output', action='store', type='str', dest='output', default=None, help='output file')
+        OptionParser.__init__(self, usage='usage: %prog [options] [files]')
+        self.add_option('--id', action='store', type='int', dest='id_column', default=None, help='term identifier column (mandatory)')
+        self.add_option('--id-prefix', action='store', type='str', dest='id_prefix', default=None, help='prepend identifier prefix (default: no prefx)')
+        self.add_option('--name', action='store', type='int', dest='name_column', help='term name column (default: no name)')
+        self.add_option('--isa', action='append', type='int', dest='isa_columns', help='parent column (multiple allowed, default: no is_a)')
+        self.add_option('--synonym', action='append', type='int', dest='synonym_columns', help='synonym column (multiple allowed, default: no synonym)')
+        self.add_option('--definition', action='store', type='int', dest='definition_column', help='definition column, default: no definition')
+        self.add_option('--delimiter', action='store', type='string', dest='delimiter', default='\t', help='field delimiter (default: tab)')
+        self.add_option('--skip-first', action='store_true', dest='skip_first', default=False, help='skip first record (default: do not skip)')
+        self.add_option('--output', action='store', type='str', dest='output', default=None, help='output file (default: standard output)')
 
     def run(self):
         options, args = self.parse_args()
+        if options.id_column is None:
+            raise Exception('missing option --id')
         self.init_ontology(options)
         self.load(options, args)
         self.ontology.check_required()
