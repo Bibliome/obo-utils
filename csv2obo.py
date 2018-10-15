@@ -41,33 +41,34 @@ class CSV2OBO(OptionParser):
         self.add_option('--definition', action='store', type='int', dest='definition_column', help='definition column')
         self.add_option('--delimiter', action='store', type='string', dest='delimiter', default='\t', help='field delimiter')
         self.add_option('--skip-first', action='store_true', dest='skip_first', default=False, help='skip first record')
+        self.add_option('--output', action='store', type='str', dest='output', default=None, help='output file')
 
     def run(self):
         options, args = self.parse_args()
         self.init_ontology(options)
-        if len(args) == 0:
-            self.load_records(options, '<stdin>', stdin)
-        else:
-            for filename in args:
-                with open(filename) as f:
-                    self.load_records(options, filename, f)
+        self.load(options, args)
         self.ontology.check_required()
         self.ontology.resolve_references(DanglingReferenceWarn(), DanglingReferenceWarn())
-        self.write(stdout)
-
+        if options.output is None:
+            self.write(stdout)
+        else:
+            with open(options.output, 'w') as f:
+                self.write(f)
+            
     def init_ontology(self, options):
         self.ontology = Ontology()
         header_reader = HeaderReader(self.ontology, UnhandledTagFail(), DeprecatedTagWarn())
         header_reader.read_date(SourcedValue('<commandline>', 0, datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
         header_reader.read_auto_generated_by(SourcedValue('<commandline>', 0, 'csv2obo.py'))
         header_reader.read_saved_by(SourcedValue('<commandline>', 0, getenv('USER')))
-        
-    def write(self, f):
-        self.ontology.write_obo(f)
-        for term in self.ontology.iterterms():
-            #stderr.write('id = %s\n' % term.id.value)
-            term.write_obo(f)
-        f.write('\n')        
+
+    def load(self, options, args):
+        if len(args) == 0:
+            self.load_records(options, '<stdin>', stdin)
+        else:
+            for filename in args:
+                with open(filename) as f:
+                    self.load_records(options, filename, f)
         
     def load_records(self, options, filename, f):
         r = csv.reader(f, delimiter=options.delimiter)
@@ -130,6 +131,13 @@ class CSV2OBO(OptionParser):
             syn = row[col]
             if syn != '':
                 term_reader.read_synonym(SourcedValue(term_reader.source, term_reader.lineno, '"%s"' % syn.replace('"', '\'')))
+
+    def write(self, f):
+        self.ontology.write_obo(f)
+        for term in self.ontology.iterterms():
+            #stderr.write('id = %s\n' % term.id.value)
+            term.write_obo(f)
+        f.write('\n')
 
 if __name__ == '__main__':
     CSV2OBO().run()
