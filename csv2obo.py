@@ -34,6 +34,7 @@ class CSV2OBO(OptionParser):
     def __init__(self):
         OptionParser.__init__(self, usage='usage: %prog [options]')
         self.add_option('--id', action='store', type='int', dest='id_column', help='term identifier column')
+        self.add_option('--id-prefix', action='store', type='str', dest='id_prefix', default=None, help='prepend identifier prefix')
         self.add_option('--name', action='store', type='int', dest='name_column', help='term name column')
         self.add_option('--isa', action='append', type='int', dest='isa_columns', help='parent column (multiple allowed)')
         self.add_option('--synonym', action='append', type='int', dest='synonym_columns', help='synonym column (multiple allowed)')
@@ -75,14 +76,22 @@ class CSV2OBO(OptionParser):
         self.read_def(options, row, term_reader)
         self.read_isas(options, row, term_reader)
         self.read_synonyms(options, row, term_reader)
-
+        
     def read_id(self, options, row, term_reader):
         id = row[options.id_column]
         if id == '':
             return False
         #stderr.write('id = %s\n' % id)
+        id = self.get_ref(options, id)
         term_reader.read_id(SourcedValue(term_reader.source, term_reader.lineno, id))
         return True
+
+    def get_ref(self, options, ref):
+        if options.id_prefix is None:
+            return ref
+        if ref.find(':') >= 0:
+            return ref
+        return ':'.join((options.id_prefix, ref))
         
     def read_name(self, options, row, term_reader):
         name = row[options.name_column]
@@ -102,6 +111,7 @@ class CSV2OBO(OptionParser):
         for col in options.isa_columns:
             ref = row[col]
             if ref != '':
+                ref = self.get_ref(options, ref)
                 term_reader.read_is_a(SourcedValue(term_reader.source, term_reader.lineno, ref))
 
     def read_synonyms(self, options, row, term_reader):
