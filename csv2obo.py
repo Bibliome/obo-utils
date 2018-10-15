@@ -40,6 +40,7 @@ class CSV2OBO(OptionParser):
         self.add_option('--synonym', action='append', type='int', dest='synonym_columns', help='synonym column (multiple allowed, default: no synonym)')
         self.add_option('--definition', action='store', type='int', dest='definition_column', help='definition column, default: no definition')
         self.add_option('--delimiter', action='store', type='string', dest='delimiter', default='\t', help='field delimiter (default: tab)')
+        self.add_option('--quote', action='store', type='string', dest='quote', default='"', help='quote character (default: ")')
         self.add_option('--skip-first', action='store_true', dest='skip_first', default=False, help='skip first record (default: do not skip)')
         self.add_option('--output', action='store', type='str', dest='output', default=None, help='output file (default: standard output)')
 
@@ -73,7 +74,7 @@ class CSV2OBO(OptionParser):
                     self.load_records(options, filename, f)
         
     def load_records(self, options, filename, f):
-        r = csv.reader(f, delimiter=options.delimiter)
+        r = csv.reader(f, delimiter=options.delimiter, quotechar=options.quote)
         lineno = 0
         for row in r:
             lineno += 1
@@ -90,9 +91,16 @@ class CSV2OBO(OptionParser):
         self.read_def(options, row, term_reader)
         self.read_isas(options, row, term_reader)
         self.read_synonyms(options, row, term_reader)
+
+    @staticmethod
+    def column(filename, lineno, row, col):
+        if col >= len(row):
+            stderr.write('%s:%d no column %d\n' % (filename, lineno, col))
+            return ''
+        return row[col]
         
     def read_id(self, options, row, term_reader):
-        id = row[options.id_column]
+        id = CSV2OBO.column(term_reader.source, term_reader.lineno, row, options.id_column)
         if id == '':
             return False
         #stderr.write('id = %s\n' % id)
@@ -108,14 +116,14 @@ class CSV2OBO(OptionParser):
         return ':'.join((options.id_prefix, ref))
         
     def read_name(self, options, row, term_reader):
-        name = row[options.name_column]
+        name = CSV2OBO.column(term_reader.source, term_reader.lineno, row, options.name_column)
         if name != '':
             #stderr.write('name = %s\n' % name)
             name = name.replace('[', '(').replace(']', ')')
             term_reader.read_name(SourcedValue(term_reader.source, term_reader.lineno, name))
 
     def read_def(self, options, row, term_reader):
-        definition = row[options.definition_column]
+        definition = CSV2OBO.column(term_reader.source, term_reader.lineno, row, options.definition_column)
         if definition != '':
             #stderr.write('def = %s\n' % definition)
             definition = definition.replace('"', '\'')
@@ -123,14 +131,14 @@ class CSV2OBO(OptionParser):
 
     def read_isas(self, options, row, term_reader):
         for col in options.isa_columns:
-            ref = row[col]
+            ref = CSV2OBO.column(term_reader.source, term_reader.lineno, row, col)
             if ref != '':
                 ref = self.get_ref(options, ref)
                 term_reader.read_is_a(SourcedValue(term_reader.source, term_reader.lineno, ref))
 
     def read_synonyms(self, options, row, term_reader):
         for col in options.synonym_columns:
-            syn = row[col]
+            syn = CSV2OBO.column(term_reader.source, term_reader.lineno, row, col)
             if syn != '':
                 term_reader.read_synonym(SourcedValue(term_reader.source, term_reader.lineno, '"%s"' % syn.replace('"', '\'')))
 
