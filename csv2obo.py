@@ -39,7 +39,7 @@ class CSV2OBO(OptionParser):
         self.add_option('--isa', action='append', type='int', dest='isa_columns', help='parent column (multiple allowed, default: no is_a)')
         self.add_option('--synonym', action='append', type='int', dest='synonym_columns', help='synonym column (multiple allowed, default: no synonym)')
         self.add_option('--definition', action='store', type='int', dest='definition_column', help='definition column, default: no definition')
-        self.add_option('--delimiter', action='store', type='string', dest='delimiter', default='\t', help='field delimiter (default: tab)')
+        self.add_option('--delimiter', action='store', type='string', dest='delimiter', default=',', help='field delimiter (default: tab)')
         self.add_option('--quote', action='store', type='string', dest='quote', default='"', help='quote character (default: ")')
         self.add_option('--skip-first', action='store_true', dest='skip_first', default=False, help='skip first record (default: do not skip)')
         self.add_option('--output', action='store', type='str', dest='output', default=None, help='output file (default: standard output)')
