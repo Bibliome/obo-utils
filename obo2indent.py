@@ -36,7 +36,7 @@ class OBO2Indent(OptionParser):
         onto = Ontology()
         onto.load_files(UnhandledTagFail(), DeprecatedTagSilent(), *args)
         onto.check_required()
-        onto.resolve_references(DanglingReferenceFail())
+        onto.resolve_references(DanglingReferenceFail(), DanglingReferenceWarn())
         if options.root is None:
             for t in onto.iterterms():
                 if 'is_a' not in t.references:

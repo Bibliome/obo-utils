@@ -705,7 +705,7 @@ class Stanza(Sourced, TagSet):
     def _write_obo_relations(self, out):
         for refrel in sorted(self.references, cmp=_reference_relation_comparator):
             for ref in self.references[refrel]:
-                if hasattr(ref.reference_object, 'name'):
+                if hasattr(ref, 'reference_object') and hasattr(ref.reference_object, 'name'):
                     comment = ref.reference_object.name.value
                 else:
                     comment = None
@@ -769,6 +769,20 @@ class Stanza(Sourced, TagSet):
                         c[rel][:] = [x for x in c[rel] if r.reference != reference]
                     return r
         return None
+
+    def parents(self, rel='is_a'):
+        if rel in  self.references:
+            for link in self.references[rel]:
+                yield link.reference_object
+
+    def children(self, rel='is_a'):
+        for stanza in self.ontology.stanzas.itervalues():
+            if isinstance(stanza, BuiltinStanza):
+                continue
+            for p in stanza.parents():
+                if p.id.value == self.id.value:
+                    yield stanza
+                    break
 
     def ancestors(self, rel='is_a', include_self=False):
         if include_self:

@@ -80,9 +80,10 @@ class Wang_Normalization(dict):
 class Wang(OptionParser):
     def __init__(self):
         OptionParser.__init__(self, usage='usage: %prog [options]')
-        self.set_defaults(weight=0.8)
+        self.set_defaults(weight=0.8, symmetric=False, print_names=False)
         self.add_option('--print-names', action='store_true', dest='print_names', help='print term names')
-        self.add_option('--weight', action='store', type='float', dest='weight', help='ancestor weght')
+        self.add_option('--weight', action='store', type='float', dest='weight', help='ancestor weight (default: %default)')
+        self.add_option('--symmetric', action='store_true', dest='symmetric', help='print symmetric matrix')
     
     def run(self):
         options, args = self.parse_args()
@@ -91,13 +92,19 @@ class Wang(OptionParser):
         onto.check_required()
         onto.resolve_references(DanglingReferenceFail(), DanglingReferenceWarn())
         wang = Wang_Normalization(onto, options.weight)
-        for term1 in onto.iterterms():
-            for term2 in onto.iterterms():
-                d = wang.term_similarity(term1, term2)
+        terms = tuple(t for t in onto.iterterms())
+        for i, termA in enumerate(terms):
+            for j in xrange(i, len(terms)):
+                termB = terms[j]
+                d = wang.term_similarity(termA, termB)
                 if options.print_names:
-                    print '%s\t%s\t%s\t%s\t%f' % (term1.id.value, term1.name.value, term2.id.value, term2.name.value, d)
+                    print '%s\t%s\t%s\t%s\t%f' % (termA.id.value, termA.name.value, termB.id.value, termB.name.value, d)
+                    if options.symmetric and i != j:
+                        print '%s\t%s\t%s\t%s\t%f' % (termB.id.value, termB.name.value, termA.id.value, termA.name.value, d)
                 else:
-                    print '%s\t%s\t%f' % (term1.id.value, term2.id.value, d)
+                    print '%s\t%s\t%f' % (termA.id.value, termB.id.value, d)
+                    if options.symmetric and i != j:
+                        print '%s\t%s\t%f' % (termB.id.value, termA.id.value, d)
 
 if __name__ == '__main__':
     Wang().run()
