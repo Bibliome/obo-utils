@@ -41,6 +41,8 @@ class TermDiff:
             self.removed_parents = ()
             self.added_children = ()
             self.removed_children = ()
+            self.added_siblings = ()
+            self.removed_siblings = ()
         else:
             self.name_change = (term1.name.value != term2.name.value)
             syns1 = set(s.text for s in term1.synonyms)
@@ -55,6 +57,10 @@ class TermDiff:
             childrenids2 = set(p.id.value for p in term2.children())
             self.added_children = tuple(p for p in term2.children() if (p.id.value not in childrenids1))
             self.removed_children = tuple(p for p in term1.children() if (p.id.value not in childrenids2))
+            siblingids1 = set(s.id.value for p in term1.parents() for s in p.children())
+            siblingids2 = set(s.id.value for p in term2.parents() for s in p.children())
+            self.added_siblings = tuple(term2.ontology.stanzas[tid] for tid in siblingids2 if tid not in siblingids1)
+            self.removed_siblings = tuple(term1.ontology.stanzas[tid] for tid in siblingids1 if tid not in siblingids2)
 
     def changed(self):
         return self.deletion or self.addition or self.name_change or self.added_synonyms or self.removed_synonyms or self.added_parents or self.removed_parents or self.added_children or self.removed_children
@@ -99,6 +105,13 @@ class TermDiff:
     def former_children(self):
         return ', '.join(('%s (%s)' % (p.id.value, p.name.value)) for p in self.removed_children)
 
+    def new_siblings(self):
+        return ', '.join(('%s (%s)' % (p.id.value, p.name.value)) for p in self.added_siblings)
+
+    def former_siblings(self):
+        return ', '.join(('%s (%s)' % (p.id.value, p.name.value)) for p in self.removed_siblings)
+
+    
 def _term_id(term):
     return term.id.value
 
@@ -203,9 +216,9 @@ class OBODiff(OptionParser):
         if not all_diff:
             stderr.write('ontologies are equivalent\n')
         else:
-            print 'ID\tNAME\tPRESENCE\tNEW NAME\tNEW SYNONYMS\tFORMER SYNONYMS\tNEW PARENTS\tFORMER PARENTS\tNEW CHILDREN\tFORMER CHILDREN'
+            print 'ID\tNAME\tPRESENCE\tNEW NAME\tNEW SYNONYMS\tFORMER SYNONYMS\tNEW PARENTS\tFORMER PARENTS\tNEW CHILDREN\tFORMER CHILDREN\tNEW SIBLINGS\tFORMER SIBLINGS'
             for diff in all_diff:
-                print '\t'.join((diff.id(), diff.name(), diff.presence(), diff.new_name(), diff.new_synonyms(), diff.former_synonyms(), diff.new_parents(), diff.former_parents(), diff.new_children(), diff.former_children()))
+                print '\t'.join((diff.id(), diff.name(), diff.presence(), diff.new_name(), diff.new_synonyms(), diff.former_synonyms(), diff.new_parents(), diff.former_parents(), diff.new_children(), diff.former_children(), diff.new_siblings(), diff.former_siblings()))
 
 
 if __name__ == '__main__':
