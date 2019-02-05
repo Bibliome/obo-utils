@@ -37,18 +37,30 @@ from sys import stdout
 class OBOSubtree(OptionParser):
     def __init__(self):
         OptionParser.__init__(self, usage='usage: %prog [options]')
-        self.add_option('--exclude-root', action='append', dest='excluded_roots', help='')
+        self.add_option('--exclude-root', action='append', dest='excluded_roots', help='exclude (remove) the specified term and descendents')
+        self.add_option('--include-root', action='append', dest='included_roots', help='include (keep) the specified term and descendents')
+        self.add_option('--default-exclude', action='store_true', default=False, dest='default_exclude', help='exclude by default if there is no specification for a term or ancestor')
 
-    def _is_excluded(self, excluded_roots, excluded_terms, term):
+    def _is_excluded(self, default_exclude, excluded_roots, included_roots, excluded_terms, included_terms, term):
         if term in excluded_terms:
             return True
+        if term in included_terms:
+            return False
+        if term.id.value in included_roots:
+            included_terms.add(term)
+            return False
         if term.id.value in excluded_roots:
             excluded_terms.add(term)
             return True
         if 'is_a' not in term.references:
+            if default_exclude:
+                excluded_terms.add(term)
+                return True
+            included_terms.add(term)
             return False
         for link in term.references['is_a']:
-            if not self._is_excluded(excluded_roots, excluded_terms, link.reference_object):
+            if not self._is_excluded(default_exclude, excluded_roots, included_roots, excluded_terms, included_terms, link.reference_object):
+                included_terms.add(term)
                 return False
         excluded_terms.add(term)
         return True
@@ -64,9 +76,14 @@ class OBOSubtree(OptionParser):
             excluded_roots = set()
         else:
             excluded_roots = set(options.excluded_roots)
+        if options.included_roots is None:
+            included_roots = set()
+        else:
+            included_roots = set(options.included_roots)
         excluded_terms = set()
+        included_terms = set()
         for term in onto.iterterms():
-            self._is_excluded(excluded_roots, excluded_terms, term)
+            self._is_excluded(options.default_exclude, excluded_roots, included_roots, excluded_terms, included_terms, term)
         for term in onto.iterterms():
             for link_type in term.references:
                 term.references[link_type][:] = [link for link in term.references[link_type] if link.reference_object not in excluded_terms]
