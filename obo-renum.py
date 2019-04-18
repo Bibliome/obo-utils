@@ -31,7 +31,10 @@ def _depth(term):
     return len(list(term.ancestors()))
 
 def _cmp(t1, t2):
-    return _depth(t1) - _depth(t2)
+    r = _depth(t1) - _depth(t2)
+    if r != 0:
+        return r
+    return cmp(t1.name.value, t2.name.value)
 
 class OBORenum(OptionParser):
     def __init__(self):
