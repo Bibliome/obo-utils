@@ -24,7 +24,7 @@
 
 import re
 from sys import stdin, stdout, stderr
-from StringIO import StringIO
+from io import StringIO
 from time import strftime
 from os import getenv
 from collections import OrderedDict
@@ -797,6 +797,8 @@ class Stanza(Sourced, TagSet):
         if rel in self.references:
             for link in self.references[rel]:
                 for parent_path in link.reference_object.paths(rel, include_self=True):
+                    if self in parent_path:
+                        raise Exception('loop: %s -> %s' % (' -> '.join(str(p.id.value) for p in parent_path), str(self.id.value)))
                     if include_self:
                         parent_path.append(self)
                     yield parent_path
@@ -935,7 +937,7 @@ class OntologyReader:
 
         
 
-BUILTIN = '''[Typedef]
+BUILTIN = u'''[Typedef]
 id: is_a
 name: is_a
 range: OBO:TERM_OR_TYPE
