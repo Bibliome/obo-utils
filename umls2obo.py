@@ -25,9 +25,9 @@
 
 from obo import *
 from optparse import OptionParser
+from sys import stdout, stderr
 
-
-class MR20B0(OptionParser):
+class UMLS20B0(OptionParser):
     def __init__(self):
         OptionParser.__init__(self, usage='usage: %prog [options]')
         self.add_option('--lang', action='store', default=None, dest='lang', help='term language filter')
@@ -36,25 +36,37 @@ class MR20B0(OptionParser):
                         
     def _load_terms(self, filename):
         with open(filename) as f:
+            nt = 0
             for n, line in enumerate(f):
+                if n % 137:
+                    stderr.write('reading %s, line % 8d, %d terms\r' % (filename, n, nt))
                 line = line.strip()
                 cols = line.split('|')
-                if self.options.lang is not None and self.options.lang != line[1]:
+                if self.options.lang is not None and self.options.lang != cols[1]:
                     continue
-                if self.options.sources and line[11] not in self.options.source:
+                if self.options.sources and cols[11] not in self.options.sources:
                     continue
                 tid = cols[0]
-                if tid in onto.stanzas:
-                    term = onto.stanzas[tid]
+                if tid in self.onto.stanzas:
+                    term = self.onto.stanzas[tid]
                 else:
-                    term = Term(filename, n, self.onto, tid)
+                    nt += 1
+                    term = Term(filename, n, self.onto, SourcedValue(filename, n, tid))
                 if cols[2] == 'P':
                     term.name = SourcedValue(filename, n, cols[14])
                 else:
                     Synonym(filename, n, term, cols[14], 'EXACT', None, '')
-                    
+        stderr.write('\n')
+        
     def run(self):
         self.options, args = self.parse_args()
         if len(args) != 1:
             raise Exception()
         self._load_terms(args[0])
+        self.onto.write_obo(stdout)
+        for term in self.onto.iterterms():
+            term.write_obo(stdout)
+
+
+if __name__ == '__main__':
+    UMLS20B0().run()
