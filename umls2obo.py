@@ -36,11 +36,14 @@ MRREL = 'MRREL.RRF'
 
 class UMLS2OBO(ArgumentParser):
     def __init__(self):
-        ArgumentParser.__init__(self, description='convert UMLS MR files into OBO', epilog='something')
+        ArgumentParser.__init__(self, description='convert UMLS MR files into OBO', epilog='')
         self.add_argument('umls_dir', metavar='UMLS_DIR', type=str, default=None, help='UMLS directory containing MR files')
-        self.add_argument('-f', '--filter', metavar='COL VALUES', type=str, action='append', nargs=2, default=[], dest='filters', help='MRCONSO.RRF filter')
-        self.add_argument('-r', '--relation', metavar='REL_COL VALUE REL', type=str, action='append', nargs=3, default=[], dest='relations', help='MRREL.RRF relations')
-        self.add_argument('-F', '--relation-filter', metavar='COL VALUES', type=str, action='append', nargs=2, default=[], dest='relation_filters', help='MRREL.RRF filter')
+        self.add_argument('-f', '--filter', metavar=('COL', 'VALUES'), type=str, action='append', nargs=2, default=[], dest='filters', help='MRCONSO.RRF filter, only read lines if COL value is in VALUES (comma separated)')
+        self.add_argument('-r', '--relation', metavar=('REL_COL', 'VALUE', 'REL'), type=str, action='append', nargs=3, default=[], dest='relations', help='MRREL.RRF relations, create a relation REL if COL calue equals VALUE')
+        self.add_argument('-F', '--relation-filter', metavar=('COL', 'VALUES'), type=str, action='append', nargs=2, default=[], dest='relation_filters', help='MRREL.RRF filter, only read lines if COL value is in VALUES (comma separated)')
+        self.add_argument('-s', '--sources', metavar='SOURCES', type=str, action='store', default=None, dest='sources', help='keep terms from the specified sources')
+        self.add_argument('--keep-duplicate-synonyms', action='store_true', default=False, dest='keep_duplicate_synonyms', help='do not remove duplicate synonyms')
+        self.add_argument('--case-folding', action='store_true', default=False, dest='case_folding', help='lowercase names and synonyms')
         self.columns = {
             MRCONSO: {},
             MRREL: {},
@@ -62,14 +65,20 @@ class UMLS2OBO(ArgumentParser):
         with open(path) as f:
             for n, line in enumerate(f):
                 line = line.strip()
+                if not line:
+                    continue
                 cols = line.split('|')
-                if UMLS2OBO._valid_cols(filters, cols):
+                if UMLS2OBO._valid_cols(n, filters, cols):
                     yield n, cols
 
     @staticmethod
-    def _valid_cols(filters, cols):
+    def _valid_cols(n, filters, cols):
         for col, values in filters:
-            if cols[col] not in values:
+            try:
+                if cols[col] not in values:
+                    return False
+            except IndexError:
+                stderr.write('\n  malformed line %d\n' % n)
                 return False
         return True
     
@@ -83,19 +92,30 @@ class UMLS2OBO(ArgumentParser):
                 
     def _load_terms(self, args):
         nt = 0
+        current = None
+        sources = set()
+        forms = set()
         for n, cols in self.mr_read(args, MRCONSO):
             if n % 137:
                 stderr.write('  line % 9d, % 7d terms\r' % (n, nt))
             tid = cols[0]
-            if tid in self.onto.stanzas:
-                term = self.onto.stanzas[tid]
-            else:
+            if current is None or current.id.value != tid:
+                if current is not None and args.sources and sources.isdisjoint(args.sources):
+                    del self.onto.stanzas[current.id.value]
+                    nt -= 1
+                current = Term(MRCONSO, n, self.onto, SourcedValue(MRCONSO, n, tid))
                 nt += 1
-                term = Term(MRCONSO, n, self.onto, SourcedValue(MRCONSO, n, tid))
+                sources = set()
+                forms = set()
+            sources.add(cols[11])
+            form = cols[14]
+            if args.case_folding:
+                form = form.lower()
             if cols[2] == 'P':
-                term.name = SourcedValue(MRCONSO, n, cols[14])
-            else:
-                Synonym(MRCONSO, n, term, cols[14], 'EXACT', None, '')
+                current.name = SourcedValue(MRCONSO, n, form)
+            elif args.keep_duplicate_synonyms or form not in forms:
+                Synonym(MRCONSO, n, current, form, 'EXACT', None, '')
+            forms.add(form)
         stderr.write('  line % 9d, % 7d terms\n' % (n, nt))
 
     def _get_relation(self, cols):
@@ -103,6 +123,15 @@ class UMLS2OBO(ArgumentParser):
             if cols[col] == value:
                 return rel
         return None
+
+    @staticmethod
+    def _has_ref(term, rel, ref):
+        if rel not in term.references:
+            return False
+        for r in term.references[rel]:
+            if r.reference == ref:
+                return True
+        return False
         
     def _load_relations(self, args):
         nr = 0
@@ -118,8 +147,10 @@ class UMLS2OBO(ArgumentParser):
             rel = self._get_relation(cols)
             if rel is None:
                 continue
-            StanzaReference(MRREL, n, self.onto.stanzas[lid], rel, rid)
-            nr += 1
+            term = self.onto.stanzas[lid]
+            if not UMLS2OBO._has_ref(term, rel, rid):
+                StanzaReference(MRREL, n, term, rel, rid)
+                nr += 1
         stderr.write('  line % 9d, % 7d relations\n' % (n, nr))
         
     def _create_filter(self, filename, col, values):
@@ -140,13 +171,17 @@ class UMLS2OBO(ArgumentParser):
         args = self.parse_args()
         self._load_columns(args)
         self.filters[MRCONSO] = tuple((self._col(MRCONSO, col), set(values.split(','))) for col, values in args.filters)
+        if args.sources is not None:
+            args.sources = set(args.sources.split(','))
         self._load_terms(args)
+        self.onto.check_required()
         self.relations = tuple((self._col(MRREL, col), value, rel) for col, value, rel in args.relations)
         if self.relations:
-            self.filters[MRREL] = tuple((self._col(MRCONSO, col), set(values.split(','))) for col, values in args.relation_filters)
+            self.filters[MRREL] = tuple((self._col(MRREL, col), set(values.split(','))) for col, values in args.relation_filters)
             self._load_relations(args)
-            stderr.write('resolving references')
+            stderr.write('resolving references\n')
             self.onto.resolve_references(DanglingReferenceFail(), DanglingReferenceFail())
+        stderr.write('writing OBO\n')
         self.onto.write_obo(stdout)
         for term in self.onto.iterterms():
             term.write_obo(stdout)
