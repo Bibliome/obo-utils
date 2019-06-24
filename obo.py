@@ -602,9 +602,9 @@ class TagSet:
             value = 'true'
         if value is False:
             return
-        value = value.replace('\n', '\\n').replace('\r', '\\n').replace('\t', '\\t')
+        value = value.replace('\n', '\\n').replace('\r', '\\n').replace('\t', '\\t').replace('\\', '\\\\').replace('[', '\\[').replace(']', '\\]').replace('{', '\\{').replace('}', '\\}')
         if quote:
-            value = '"%s"' % value
+            value = '"%s"' % value.replace('"', '\\"')
         if scope:
             value = '%s %s' % (value, scope)
         if dbxrefs is not None:
