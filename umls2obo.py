@@ -26,8 +26,7 @@
 from obo import *
 from argparse import ArgumentParser
 from sys import stdout, stderr
-
-
+import re 
 
 MRCOLS = 'MRCOLS.RRF'
 MRFILES = 'MRFILES.RRF'
@@ -43,7 +42,8 @@ class UMLS2OBO(ArgumentParser):
         self.add_argument('-F', '--relation-filter', metavar=('COL', 'VALUES'), type=str, action='append', nargs=2, default=[], dest='relation_filters', help='MRREL.RRF filter, only read lines if COL value is in VALUES (comma separated)')
         self.add_argument('-s', '--sources', metavar='SOURCES', type=str, action='store', default=None, dest='sources', help='keep terms from the specified sources')
         self.add_argument('--keep-duplicate-synonyms', action='store_true', default=False, dest='keep_duplicate_synonyms', help='do not remove duplicate synonyms')
-        self.add_argument('--case-folding', action='store_true', default=False, dest='case_folding', help='lowercase names and synonyms')
+        self.add_argument('-c', '--case-folding', action='store_true', default=False, dest='case_folding', help='lowercase names and synonyms')
+        self.add_argument('-p', '--exclude-pattern', metavar='REGEXP', action='append', type=re.compile, default=[], dest='exclude_patterns', help='exclude labels that match the specified regular expression')
         self.columns = {
             MRCONSO: {},
             MRREL: {},
@@ -89,7 +89,14 @@ class UMLS2OBO(ArgumentParser):
                 colmap = self.columns[filename]
                 for idx, name in enumerate(cols[2].split(',')):
                     colmap[name] = idx
-                
+
+    def _exclude(self, args, form):
+        for p in args.exclude_patterns:
+            m = p.search(form)
+            if m is not None:
+                return True
+        return False
+    
     def _load_terms(self, args):
         nt = 0
         current = None
@@ -100,9 +107,17 @@ class UMLS2OBO(ArgumentParser):
                 stderr.write('  line % 9d, % 7d terms\r' % (n, nt))
             tid = cols[0]
             if current is None or current.id.value != tid:
-                if current is not None and args.sources and sources.isdisjoint(args.sources):
-                    del self.onto.stanzas[current.id.value]
-                    nt -= 1
+                if current is not None:
+                    if (not forms) or (args.sources and sources.isdisjoint(args.sources)):
+                        del self.onto.stanzas[current.id.value]
+                        nt -= 1
+                    elif current.name is None:
+                        if current.synonyms:
+                            syn = current.synonyms.pop(0)
+                            current.name = SourcedValue(MRCONSO, syn.lineno, syn.text)
+                        else:
+                            del self.onto.stanzas[current.id.value]
+                            nt -= 1
                 current = Term(MRCONSO, n, self.onto, SourcedValue(MRCONSO, n, tid))
                 nt += 1
                 sources = set()
@@ -111,6 +126,8 @@ class UMLS2OBO(ArgumentParser):
             form = cols[14]
             if args.case_folding:
                 form = form.lower()
+            if self._exclude(args, form):
+                continue
             if cols[2] == 'P':
                 current.name = SourcedValue(MRCONSO, n, form)
             elif args.keep_duplicate_synonyms or form not in forms:
