@@ -24,7 +24,7 @@
 # SOFTWARE.
 
 from obo import *
-from argparse import ArgumentParser
+from argparse import ArgumentParser, RawDescriptionHelpFormatter
 from sys import stdout, stderr
 import re 
 
@@ -33,9 +33,38 @@ MRFILES = 'MRFILES.RRF'
 MRCONSO = 'MRCONSO.RRF'
 MRREL = 'MRREL.RRF'
 
+
+EPILOG = '''* Filter labels by language (english):
+  --filter LAT ENG
+
+* Filter labels by source:
+  --filter SAB SNOMEDCT_US,RXNORM
+
+* Filter terms by source (import all labels if a CUI contains at least one label from the specified sources):
+  --sources SNOMEDCT_US,RXNORM
+
+* Lowercase labels (and case insensitive de-duplication):
+  --case-folding
+
+* Exclude labels with regexp:
+  --exclude-pattern '\d-'
+
+* Import is-a relations (strict):
+  --relation RELA isa is_a
+
+* Import is-a relation (relaxed):
+  --relation REL CHD is_a
+
+* Relation filter by identifiers used to assert the relation:
+  --relation-filter STYPE1 SCUI --relation-filter STYPE2 SCUI
+
+* Relation filter by source:
+  --relation-filter SAB SNOMED_CT,RXNORM
+'''
+
 class UMLS2OBO(ArgumentParser):
     def __init__(self):
-        ArgumentParser.__init__(self, description='convert UMLS MR files into OBO', epilog='')
+        ArgumentParser.__init__(self, description='convert UMLS MR files into OBO', epilog=EPILOG, formatter_class=RawDescriptionHelpFormatter)
         self.add_argument('umls_dir', metavar='UMLS_DIR', type=str, default=None, help='UMLS directory containing MR files')
         self.add_argument('-f', '--filter', metavar=('COL', 'VALUES'), type=str, action='append', nargs=2, default=[], dest='filters', help='MRCONSO.RRF filter, only read lines if COL value is in VALUES (comma separated)')
         self.add_argument('-r', '--relation', metavar=('REL_COL', 'VALUE', 'REL'), type=str, action='append', nargs=3, default=[], dest='relations', help='MRREL.RRF relations, create a relation REL if COL calue equals VALUE')
