@@ -81,7 +81,7 @@ class Hierarchy:
     def read_frequencies(self, filename, c):
         f = open(filename)
         for line in f:
-            count, id = line.strip().split(' ', 1)
+            count, id = line.strip().split(None, 1)
             if id in self.node_map:
                 self.node_map[id].counts[c].proper += int(count)
         f.close()
@@ -207,6 +207,7 @@ class HStat(OptionParser):
         hierarchy.read_frequencies(options.expected, EXPECTED)
         hierarchy.read_frequencies(options.observed, OBSERVED)
         hierarchy.root.cumulate()
+        print 'ID\tDIRECTION\tDELTA\tOBSERVED\tEXPECTED\tCHILD-EXPECTED\tP-VALUE\tNAME'
         for cells in test_children_chi2(hierarchy.root, options.risk, options.deltafun, options.depth):
             for cell in cells:
                 print '%s\t% 2d\t%15.6f\t%8d\t%15.6f\t%8d\t%f\t%s' % (cell.child.id, cell.direction, cell.delta, cell.observed, cell.expected, cell.child.expected(), cell.pvalue, cell.child.name)
