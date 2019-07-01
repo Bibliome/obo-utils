@@ -184,10 +184,10 @@ class UMLS2OBO(ArgumentParser):
         for n, cols in self.mr_read(args, MRREL):
             if n % 137:
                 stderr.write('  line % 9d, % 7d relations\r' % (n, nr))
-            lid = cols[0]
+            lid = cols[4]
             if lid not in self.onto.stanzas:
                 continue
-            rid = cols[4]
+            rid = cols[0]
             if rid not in self.onto.stanzas:
                 continue
             rel = self._get_relation(cols)
