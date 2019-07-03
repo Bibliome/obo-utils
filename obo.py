@@ -1056,6 +1056,11 @@ class Ontology(TagSet):
             if isinstance(term, Term):
                 yield term
 
+    def iter_user_stanzas(self):
+        for stanza in self.stanzas.itervalues():
+            if isinstance(stanza, BuiltinStanza) or stanza.source == '<<builtin>>':
+                continue
+            yield stanza
 
 if __name__ == '__main__':
     onto = Ontology()
