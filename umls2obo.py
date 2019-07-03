@@ -73,6 +73,7 @@ class UMLS2OBO(ArgumentParser):
         self.add_argument('--keep-duplicate-synonyms', action='store_true', default=False, dest='keep_duplicate_synonyms', help='do not remove duplicate synonyms')
         self.add_argument('-c', '--case-folding', action='store_true', default=False, dest='case_folding', help='lowercase names and synonyms')
         self.add_argument('-p', '--exclude-pattern', metavar='REGEXP', action='append', type=re.compile, default=[], dest='exclude_patterns', help='exclude labels that match the specified regular expression')
+        self.add_argument('-R', '--root', metavar=('REL', 'ID', 'NAME'), type=str, action='append', nargs=3, default=[], dest='roots', help='add root')
         self.columns = {
             MRCONSO: {},
             MRREL: {},
@@ -226,7 +227,14 @@ class UMLS2OBO(ArgumentParser):
             self.filters[MRREL] = tuple((self._col(MRREL, col), set(values.split(','))) for col, values in args.relation_filters)
             self._load_relations(args)
             stderr.write('resolving references\n')
-            self.onto.resolve_references(DanglingReferenceFail(), DanglingReferenceFail())
+        for rel, id, name in args.roots:
+            sourced_id = SourcedValue('<cmdline>', 0, id)
+            root = Term('<cmdline>', 0, self.onto, sourced_id)
+            root.name = SourcedValue('<cmdline>', 0, name)
+            for term in self.onto.iterterms():
+                if rel not in term.references:
+                    StanzaReference('<cmdline>', 0, term, rel, id)
+        self.onto.resolve_references(DanglingReferenceFail(), DanglingReferenceFail())
         stderr.write('writing OBO\n')
         self.onto.write_obo(stdout)
         for term in self.onto.iterterms():
