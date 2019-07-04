@@ -232,7 +232,7 @@ class UMLS2OBO(ArgumentParser):
             root = Term('<cmdline>', 0, self.onto, sourced_id)
             root.name = SourcedValue('<cmdline>', 0, name)
             for term in self.onto.iterterms():
-                if rel not in term.references:
+                if rel not in term.references and term.id.value != id:
                     StanzaReference('<cmdline>', 0, term, rel, id)
         self.onto.resolve_references(DanglingReferenceFail(), DanglingReferenceFail())
         stderr.write('writing OBO\n')
