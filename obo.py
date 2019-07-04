@@ -160,7 +160,7 @@ def unquoted_string(name, phrase=False):
     return r'(?P<' + name + r'>' + S + ')'
 
 def quoted_string(name):
-    return r'"(?P<' + name + '>(?:[^\"]|\\.)*)"'
+    return r'"(?P<' + name + '>.*?)(?<!\\\)"'
 
 TERMINAL_COMMENT = r'\s*(?:!.*)?$'
 SCOPE = r'(?:\s+(?P<scope>EXACT|BROAD|NARROW|RELATED))?'
@@ -185,6 +185,26 @@ def match_pattern(pattern, tag, value):
     if result is None:
         raise OBOInvalidFormat(value, tag)
     return result
+
+def unescape(s):
+    l = []
+    esc = False
+    for c in s:
+        if esc:
+            if c == 'n':
+                l.append('\n')
+            elif c == 't':
+                l.append('\t')
+            elif c == 'r':
+                l.append('\r')
+            else:
+                l.append(c)
+            esc = False
+        elif c == '\\':
+            esc = True
+        else:
+            l.append(c)
+    return ''.join(l)
 
 def get_quoted_value(tag, value):
     return match_pattern(QUOTED_VALUE_PATTERN, tag, value).group('value')
@@ -317,7 +337,7 @@ class StanzaReader(Sourced, TagReader):
         self.tagset = self.stanza
         
     def read_name(self, value):
-        name = get_free_value('name', value)
+        name = unescape(get_free_value('name', value))
         if self.stanza.name is not None:
             msg = self.stanza.name.duplicate('name', '%s / %s' % (self.stanza.name.value, name))
             if self.stanza.name.value != name:
@@ -380,7 +400,7 @@ class StanzaReader(Sourced, TagReader):
             if type not in self.ontology.synonymtypedef:
                 raise OBOException(value, 'undefined synonym type: ' + type)
             default_scope = self.ontology.synonymtypedef[type].scope
-        text = m.group('text')
+        text = unescape(m.group('text'))
         scope = m.group('scope')
         if scope is None:
             scope = default_scope
