@@ -25,8 +25,11 @@
 
 from obo import *
 from argparse import ArgumentParser, RawDescriptionHelpFormatter
-from sys import stdout, stderr
+from sys import stdout, stderr, argv
 import re 
+import datetime
+from os import getenv
+from datetime import datetime
 
 MRCOLS = 'MRCOLS.RRF'
 MRFILES = 'MRFILES.RRF'
@@ -84,6 +87,10 @@ class UMLS2OBO(ArgumentParser):
         }
         self.relations = ()
         self.onto = Ontology()
+        header_reader = HeaderReader(self.onto, UnhandledTagFail(), DeprecatedTagWarn())
+        header_reader.read_date(SourcedValue('<cmdline>', 0, datetime.now().strftime('%d:%m:%Y %H:%M')))
+        header_reader.read_auto_generated_by(SourcedValue('<cmdline>', 0, ' '.join(argv)))
+        header_reader.read_saved_by(SourcedValue('<cmdline>', 0, getenv('USER')))
 
     def mr_read(self, args, filename):
         path = '/'.join((args.umls_dir, filename))
