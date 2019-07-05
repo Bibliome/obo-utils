@@ -35,6 +35,7 @@ MRCOLS = 'MRCOLS.RRF'
 MRFILES = 'MRFILES.RRF'
 MRCONSO = 'MRCONSO.RRF'
 MRREL = 'MRREL.RRF'
+MRHIER = 'MRHIER.RRF'
 
 
 EPILOG = '''* Filter labels by language (english):
@@ -80,11 +81,14 @@ class UMLS2OBO(ArgumentParser):
         self.columns = {
             MRCONSO: {},
             MRREL: {},
+            MRHIER: {},
         }
         self.filters = {
             MRCONSO: (),
             MRREL: (),
+            MRHIER: (),
         }
+        self.aui2cui = {}
         self.relations = ()
         self.onto = Ontology()
         header_reader = HeaderReader(self.onto, UnhandledTagFail(), DeprecatedTagWarn())
@@ -142,8 +146,10 @@ class UMLS2OBO(ArgumentParser):
         for n, cols in self.mr_read(args, MRCONSO):
             if n % 137:
                 stderr.write('  line % 9d, % 7d terms\r' % (n, nt))
-            tid = cols[0]
-            if current is None or current.id.value != tid:
+            cui = cols[0]
+            aui = cols[7]
+            self.aui2cui[aui] = cui
+            if current is None or current.id.value != cui:
                 if current is not None:
                     if (not forms) or (args.sources and sources.isdisjoint(args.sources)):
                         del self.onto.stanzas[current.id.value]
@@ -155,7 +161,7 @@ class UMLS2OBO(ArgumentParser):
                         else:
                             del self.onto.stanzas[current.id.value]
                             nt -= 1
-                current = Term(MRCONSO, n, self.onto, SourcedValue(MRCONSO, n, tid))
+                current = Term(MRCONSO, n, self.onto, SourcedValue(MRCONSO, n, cui))
                 nt += 1
                 sources = set()
                 forms = set()
@@ -201,6 +207,9 @@ class UMLS2OBO(ArgumentParser):
             rel = self._get_relation(cols)
             if rel is None:
                 continue
+            if lid == rid:
+                #stderr.write('\n  relation with self (%s) line %d\n' % (lid, n))
+                continue
             term = self.onto.stanzas[lid]
             if not UMLS2OBO._has_ref(term, rel, rid):
                 StanzaReference(MRREL, n, term, rel, rid)
@@ -221,6 +230,57 @@ class UMLS2OBO(ArgumentParser):
         except ValueError:
             return self.columns[filename][col]
 
+    def _get_mutual(self, rel):
+        result = set()
+        for stanza in self.onto.iter_user_stanzas():
+            if rel not in stanza.references:
+                continue
+            sid = stanza.id.value
+            for link in stanza.references[rel]:
+                ref = link.reference
+                if ref not in self.onto.stanzas:
+                    continue
+                other = self.onto.stanzas[ref]
+                if rel not in other.references:
+                    continue
+                for olink in other.references[rel]:
+                    if olink.reference == sid and (ref, sid) not in result:
+                        result.add((sid, ref))
+        return result
+
+    def _merge_mutual(self, stanza1, stanza2):
+        for rel, links in stanza2.references.items():
+            if rel in stanza1.references:
+                already = set(l.reference for l in stanza1.references[rel])
+            else:
+                already = ()
+            for link in links:
+                if link.reference not in already:
+                    StanzaReference(link.source, link.lineno, stanza1, rel, link.reference)
+        already = set(syn.text for syn in stanza1.synonyms)
+        for syn in stanza2.synonyms:
+            if syn.text not in already:
+                Synonym(syn.source, syn.lineno, stanza1, syn.text, 'EXACT', None, '')
+        id1 = stanza1.id.value
+        id2 = stanza2.id.value
+        for stanza in self.onto.iter_user_stanzas():
+            for links in stanza.references.values():
+                for link in links:
+                    if link.reference == id2:
+                        link.reference = id1
+        for rel in stanza1.references:
+            stanza1.references[rel] = list(link for link in stanza1.references[rel] if link.reference != id1)
+        stanza1.alt_ids.append(id2)
+        del self.onto.stanzas[id2]
+
+    def _merge_all(self):
+        nmerge = 0
+        for rel in set(rel for (col, val, rel) in self.relations):
+            for id1, id2 in self._get_mutual(rel):
+                self._merge_mutual(self.onto.stanzas[id1], self.onto.stanzas[id2])
+                nmerge += 1
+        return nmerge
+                
     def run(self):
         args = self.parse_args()
         self._load_columns(args)
@@ -229,11 +289,16 @@ class UMLS2OBO(ArgumentParser):
             args.sources = set(args.sources.split(','))
         self._load_terms(args)
         self.onto.check_required()
-        self.relations = tuple((self._col(MRREL, col), value, rel) for col, value, rel in args.relations)
-        if self.relations:
+        if len(args.relations) > 0:
+            self.relations = tuple((self._col(MRREL, col), value, rel) for col, value, rel in args.relations)
             self.filters[MRREL] = tuple((self._col(MRREL, col), set(values.split(','))) for col, values in args.relation_filters)
             self._load_relations(args)
-            stderr.write('resolving references\n')
+            while True:
+                nmerge = self._merge_all()
+                if nmerge == 0:
+                    break
+                else:
+                    stderr.write('merged %d terms\n' % nmerge)
         for rel, id, name in args.roots:
             sourced_id = SourcedValue('<cmdline>', 0, id)
             root = Term('<cmdline>', 0, self.onto, sourced_id)
@@ -241,6 +306,7 @@ class UMLS2OBO(ArgumentParser):
             for term in self.onto.iterterms():
                 if rel not in term.references and term.id.value != id:
                     StanzaReference('<cmdline>', 0, term, rel, id)
+        stderr.write('resolving references\n')
         self.onto.resolve_references(DanglingReferenceFail(), DanglingReferenceFail())
         stderr.write('writing OBO\n')
         self.onto.write_obo(stdout)
