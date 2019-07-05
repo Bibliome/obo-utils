@@ -814,19 +814,21 @@ class Stanza(Sourced, TagSet):
                     yield a
 
     def paths(self, rel='is_a', include_self=False):
-        if rel in self.references:
-            for link in self.references[rel]:
-                for parent_path in link.reference_object.paths(rel, include_self=True):
-                    if self in parent_path:
-                        raise Exception('loop: %s -> %s' % (' -> '.join(str(p.id.value) for p in parent_path), str(self.id.value)))
-                    if include_self:
-                        parent_path.append(self)
-                    yield parent_path
-        elif include_self:
-            yield [self]
-        else:
-            yield []
-
+        try:
+            if rel in self.references:
+                for link in self.references[rel]:
+                    for parent_path in link.reference_object.paths(rel, include_self=True):
+                        if self in parent_path:
+                            raise Exception('loop: %s <- %s' % (' <- '.join(str(p.id.value) for p in parent_path), str(self.id.value)))
+                        if include_self:
+                            parent_path.append(self)
+                        yield parent_path
+            elif include_self:
+                yield [self]
+            else:
+                yield []
+        except RuntimeError:
+            raise OBOException(self, 'cycle for %s (%s)?' % (self.id.value, self.name.value))
 
 class TermOrType(Stanza):
     def __init__(self, source, lineno, ontology, id):
