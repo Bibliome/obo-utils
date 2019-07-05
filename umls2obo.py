@@ -277,8 +277,9 @@ class UMLS2OBO(ArgumentParser):
         nmerge = 0
         for rel in set(rel for (col, val, rel) in self.relations):
             for id1, id2 in self._get_mutual(rel):
-                self._merge_mutual(self.onto.stanzas[id1], self.onto.stanzas[id2])
-                nmerge += 1
+                if id1 in self.onto.stanzas and id2 in self.onto.stanzas:
+                    self._merge_mutual(self.onto.stanzas[id1], self.onto.stanzas[id2])
+                    nmerge += 1
         return nmerge
                 
     def run(self):
