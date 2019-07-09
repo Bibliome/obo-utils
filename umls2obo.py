@@ -78,6 +78,8 @@ class UMLS2OBO(ArgumentParser):
         self.add_argument('-c', '--case-folding', action='store_true', default=False, dest='case_folding', help='lowercase names and synonyms')
         self.add_argument('-p', '--exclude-pattern', metavar='REGEXP', action='append', type=re.compile, default=[], dest='exclude_patterns', help='exclude labels that match the specified regular expression')
         self.add_argument('-R', '--root', metavar=('REL', 'ID', 'NAME'), type=str, action='append', nargs=3, default=[], dest='roots', help='add root')
+        self.add_argument('-H', '--hierarchy', metavar='REL', type=str, default=None, dest='hierarchy', help='')
+        self.add_argument('-I', '--hierarchy-filter', metavar=('COL', 'VALUES'), type=str, action='append', nargs=2, default=[], dest='hierarchy_filters', help='MRHIER.RRF filter, only read lines if COL value is in VALUES (comma separated)')
         self.columns = {
             MRCONSO: {},
             MRREL: {},
@@ -281,7 +283,26 @@ class UMLS2OBO(ArgumentParser):
                     self._merge_mutual(self.onto.stanzas[id1], self.onto.stanzas[id2])
                     nmerge += 1
         return nmerge
-                
+
+    def _load_hierarchy(self, args):
+        nr = 0
+        for n, cols in self.mr_read(args, MRHIER):
+            if n % 137:
+                stderr.write('  line % 9d, % 7d relations\r' % (n, nr))
+            cui1 = cols[0]
+            if cui1 not in self.onto.stanzas:
+                continue
+            term = self.onto.stanzas[cui1]
+            cui_path = tuple(self.aui2cui[aui] for aui in cols[6].split('.') if aui in self.aui2cui)
+            path = tuple((cui, self.onto.stanzas[cui]) for cui in cui_path if cui in self.onto.stanzas)
+            for cui, parent in reversed(path):
+                if term.id.value != cui and not UMLS2OBO._has_ref(term, args.hierarchy, cui):
+                    StanzaReference(MRHIER, n, term, args.hierarchy, cui)
+                    nr += 1
+                    break
+                term = parent
+        stderr.write('  line % 9d, % 7d relations\n' % (n, nr))
+
     def run(self):
         args = self.parse_args()
         self._load_columns(args)
@@ -300,6 +321,9 @@ class UMLS2OBO(ArgumentParser):
                     break
                 else:
                     stderr.write('merged %d terms\n' % nmerge)
+        if args.hierarchy is not None:
+            self.filters[MRHIER] = tuple((self._col(MRHIER, col), set(values.split(','))) for col, values in args.hierarchy_filters)
+            self._load_hierarchy(args)
         for rel, id, name in args.roots:
             sourced_id = SourcedValue('<cmdline>', 0, id)
             root = Term('<cmdline>', 0, self.onto, sourced_id)
