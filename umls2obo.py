@@ -70,6 +70,8 @@ class UMLS2OBO(ArgumentParser):
     def __init__(self):
         ArgumentParser.__init__(self, description='convert UMLS MR files into OBO', epilog=EPILOG, formatter_class=RawDescriptionHelpFormatter)
         self.add_argument('umls_dir', metavar='UMLS_DIR', type=str, default=None, help='UMLS directory containing MR files')
+        self.add_argument('-n', '--no-conso', action='store_true', dest='no_conso', default=False, help='')
+        self.add_argument('-b', '--load-obo', metavar='OBO', type=str, action='append', default=[], dest='obo', help='')
         self.add_argument('-f', '--filter', metavar=('COL', 'VALUES'), type=str, action='append', nargs=2, default=[], dest='filters', help='MRCONSO.RRF filter, only read lines if COL value is in VALUES (comma separated)')
         self.add_argument('-r', '--relation', metavar=('REL_COL', 'VALUE', 'REL'), type=str, action='append', nargs=3, default=[], dest='relations', help='MRREL.RRF relations, create a relation REL if COL calue equals VALUE')
         self.add_argument('-F', '--relation-filter', metavar=('COL', 'VALUES'), type=str, action='append', nargs=2, default=[], dest='relation_filters', help='MRREL.RRF filter, only read lines if COL value is in VALUES (comma separated)')
@@ -93,11 +95,25 @@ class UMLS2OBO(ArgumentParser):
         self.aui2cui = {}
         self.relations = ()
         self.onto = Ontology()
+        self.in_cycle = set()
+        self.no_cycle = set()
         header_reader = HeaderReader(self.onto, UnhandledTagFail(), DeprecatedTagWarn())
         header_reader.read_date(SourcedValue('<cmdline>', 0, datetime.now().strftime('%d:%m:%Y %H:%M')))
         header_reader.read_auto_generated_by(SourcedValue('<cmdline>', 0, ' '.join(argv)))
         header_reader.read_saved_by(SourcedValue('<cmdline>', 0, getenv('USER')))
 
+    @staticmethod
+    def filter_in_list(values):
+        if values.startswith('~'):
+            neg = True
+            values = values[1:]
+        else:
+            neg = False
+        values = set(v.strip() for v in values.split(','))
+        if neg:
+            return (lambda x: x not in values)
+        return (lambda x: x in values)
+        
     def mr_read(self, args, filename):
         path = '/'.join((args.umls_dir, filename))
         stderr.write('reading %s\n' % path)
@@ -116,9 +132,9 @@ class UMLS2OBO(ArgumentParser):
 
     @staticmethod
     def _valid_cols(n, filters, cols):
-        for col, values in filters:
+        for col, f in filters:
             try:
-                if cols[col] not in values:
+                if not f(cols[col]):
                     return False
             except IndexError:
                 stderr.write('\n  malformed line %d\n' % n)
@@ -232,58 +248,6 @@ class UMLS2OBO(ArgumentParser):
         except ValueError:
             return self.columns[filename][col]
 
-    def _get_mutual(self, rel):
-        result = set()
-        for stanza in self.onto.iter_user_stanzas():
-            if rel not in stanza.references:
-                continue
-            sid = stanza.id.value
-            for link in stanza.references[rel]:
-                ref = link.reference
-                if ref not in self.onto.stanzas:
-                    continue
-                other = self.onto.stanzas[ref]
-                if rel not in other.references:
-                    continue
-                for olink in other.references[rel]:
-                    if olink.reference == sid and (ref, sid) not in result:
-                        result.add((sid, ref))
-        return result
-
-    def _merge_mutual(self, stanza1, stanza2):
-        for rel, links in stanza2.references.items():
-            if rel in stanza1.references:
-                already = set(l.reference for l in stanza1.references[rel])
-            else:
-                already = ()
-            for link in links:
-                if link.reference not in already:
-                    StanzaReference(link.source, link.lineno, stanza1, rel, link.reference)
-        already = set(syn.text for syn in stanza1.synonyms)
-        for syn in stanza2.synonyms:
-            if syn.text not in already:
-                Synonym(syn.source, syn.lineno, stanza1, syn.text, 'EXACT', None, '')
-        id1 = stanza1.id.value
-        id2 = stanza2.id.value
-        for stanza in self.onto.iter_user_stanzas():
-            for links in stanza.references.values():
-                for link in links:
-                    if link.reference == id2:
-                        link.reference = id1
-        for rel in stanza1.references:
-            stanza1.references[rel] = list(link for link in stanza1.references[rel] if link.reference != id1)
-        stanza1.alt_ids.append(id2)
-        del self.onto.stanzas[id2]
-
-    def _merge_all(self):
-        nmerge = 0
-        for rel in set(rel for (col, val, rel) in self.relations):
-            for id1, id2 in self._get_mutual(rel):
-                if id1 in self.onto.stanzas and id2 in self.onto.stanzas:
-                    self._merge_mutual(self.onto.stanzas[id1], self.onto.stanzas[id2])
-                    nmerge += 1
-        return nmerge
-
     def _load_hierarchy(self, args):
         nr = 0
         for n, cols in self.mr_read(args, MRHIER):
@@ -303,27 +267,68 @@ class UMLS2OBO(ArgumentParser):
                 term = parent
         stderr.write('  line % 9d, % 7d relations\n' % (n, nr))
 
+    def _cycles(self, rel, stanza, path):
+        if stanza.id.value not in self.in_cycle and stanza.id.value not in self.no_cycle:
+            if rel in stanza.references:
+                for link in stanza.references[rel]:
+                    ref = link.reference
+                    if ref in self.in_cycle:
+                        continue
+                    if ref in self.no_cycle:
+                        continue
+                    if ref not in self.onto.stanzas:
+                        continue
+                    if ref in path:
+                        index = path.index(ref)
+                        cycle = path[index:]
+                        self.in_cycle.update(cycle)
+                        yield cycle
+                    else:
+                        for cycle in self._cycles(rel, self.onto.stanzas[ref], path + [ref]):
+                            yield cycle
+            else:
+                self.no_cycle.update(path)
+                
     def run(self):
         args = self.parse_args()
+        if len(args.obo) > 0:
+            stderr.write('loading OBO files\n')
+            self.onto.load_files(UnhandledTagFail(), DeprecatedTagWarn(), *args.obo)
         self._load_columns(args)
-        self.filters[MRCONSO] = tuple((self._col(MRCONSO, col), set(values.split(','))) for col, values in args.filters)
+        self.filters[MRCONSO] = tuple((self._col(MRCONSO, col), UMLS2OBO.filter_in_list(values)) for col, values in args.filters)
         if args.sources is not None:
             args.sources = set(args.sources.split(','))
-        self._load_terms(args)
+        if not args.no_conso:
+            self._load_terms(args)
         self.onto.check_required()
         if len(args.relations) > 0:
             self.relations = tuple((self._col(MRREL, col), value, rel) for col, value, rel in args.relations)
-            self.filters[MRREL] = tuple((self._col(MRREL, col), set(values.split(','))) for col, values in args.relation_filters)
+            self.filters[MRREL] = tuple((self._col(MRREL, col), UMLS2OBO.filter_in_list(values)) for col, values in args.relation_filters)
             self._load_relations(args)
-            while True:
-                nmerge = self._merge_all()
-                if nmerge == 0:
-                    break
-                else:
-                    stderr.write('merged %d terms\n' % nmerge)
         if args.hierarchy is not None:
-            self.filters[MRHIER] = tuple((self._col(MRHIER, col), set(values.split(','))) for col, values in args.hierarchy_filters)
+            self.filters[MRHIER] = tuple((self._col(MRHIER, col), UMLS2OBO.filter_in_list(values)) for col, values in args.hierarchy_filters)
             self._load_hierarchy(args)
+        if args.hierarchy is not None or len(args.relations) > 0:
+            stderr.write('breaking cycles')
+            rels = set(rel for col, val, rel in self.relations)
+            if args.hierarchy is not None:
+                rels.add(args.hierarchy)
+            while True:
+                ncycles = 0
+                for rel in rels:
+                    self.in_cycle = set()
+                    self.no_cycle = set()
+                    for stanza in self.onto.iter_user_stanzas():
+                        for cycle in self._cycles(rel, stanza, [stanza.id.value]):
+                            cui1 = cycle[0]
+                            cui2 = cycle[1]
+                            stanza1 = self.onto.stanzas[cui1]
+                            stanza1.references[rel] = [link for link in stanza1.references[rel] if link.reference != cui2]
+                            ncycles += 1
+                if ncycles > 0:
+                    stderr.write('  broke % 3d cycles\n' % ncycles)
+                else:
+                    break
         for rel, id, name in args.roots:
             sourced_id = SourcedValue('<cmdline>', 0, id)
             root = Term('<cmdline>', 0, self.onto, sourced_id)
