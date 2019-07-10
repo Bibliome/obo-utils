@@ -104,11 +104,16 @@ class UMLS2OBO(ArgumentParser):
 
     @staticmethod
     def filter_in_list(values):
-        if values.startswith('~'):
+        if values.startswith('^'):
             neg = True
             values = values[1:]
         else:
             neg = False
+        if values.startswith('/') and values.endswith('/'):
+            pat = re.compile(values[1:-1])
+            if neg:
+                return (lambda x: pat.search(x) is None)
+            return (lambda x: pat.search(x) is not None)
         values = set(v.strip() for v in values.split(','))
         if neg:
             return (lambda x: x not in values)
