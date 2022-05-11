@@ -23,9 +23,9 @@
 
 
 import re
-from sys import stdin, stderr
-from io import StringIO
-from collections import OrderedDict
+import sys
+import io
+import collections
 import functools
 
 
@@ -286,7 +286,7 @@ class Sourced:
         return '%s:%d' % (self.source, self.lineno)
 
     def warning(self, msg):
-        stderr.write(self.message(msg + '\n'))
+        sys.stderr.write(self.message(msg + '\n'))
 
     def duplicate(self, tag, msg=None):
         r = 'duplicate tag ' + tag + ', see: ' + self.message()
@@ -1092,18 +1092,18 @@ def: "Indicates the domain (type of source) of a relation"
 class Ontology(TagSet):
     def __init__(self):
         TagSet.__init__(self)
-        self.synonymtypedef = OrderedDict()
+        self.synonymtypedef = collections.OrderedDict()
         self.remark = []
-        self.stanzas = OrderedDict()
+        self.stanzas = collections.OrderedDict()
         self.builtin = {}
-        self.subsetdef = OrderedDict()
+        self.subsetdef = collections.OrderedDict()
         self.format_version = '1.2'
         self.version = None
         self.date = None
         self.saved_by = None
         self.auto_generated_by = None
         self.default_namespace = None
-        OntologyReader(self).read('<<builtin>>', StringIO(BUILTIN), UnhandledTagFail(), DeprecatedTagWarn(), InvalidXRefWarn())
+        OntologyReader(self).read('<<builtin>>', io.StringIO(BUILTIN), UnhandledTagFail(), DeprecatedTagWarn(), InvalidXRefWarn())
         self.builtin_relations = set(r.id.value for r in self.stanzas.values() if (r.source == '<<builtin>>'))
         BuiltinType(self)
         BuiltinInstance(self)
@@ -1132,7 +1132,7 @@ class Ontology(TagSet):
 
     def load_stdin(self, unhandled_tag_option, deprecated_tag_option):
         reader = OntologyReader(self)
-        reader.read('<<stdin>>', stdin, unhandled_tag_option, deprecated_tag_option)
+        reader.read('<<stdin>>', sys.stdin, unhandled_tag_option, deprecated_tag_option)
 
     def resolve_references(self, dangling_reference_option, obsolete_reference_option):
         for s in self.stanzas.values():
