@@ -29,6 +29,10 @@ import collections
 import functools
 
 
+def cmp(a, b):
+    return (a > b) - (a < b)
+
+
 class OBOException(Exception):
     '''Generic exception for all things OBO'''
     def __init__(self, sourced, msg):
@@ -741,7 +745,7 @@ def _reference_relation_comparator(a, b):
         return -1
     if b == 'is_a':
         return 1
-    return (a > b) - (a < b)
+    return cmp(a, b)
 
 
 class Stanza(Sourced, TagSet):

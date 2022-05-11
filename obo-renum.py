@@ -2,19 +2,19 @@
 
 
 # MIT License
-# 
+#
 # Copyright (c) 2017 Institut National de la Recherche Agronomique
-# 
+#
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
 # in the Software without restriction, including without limitation the rights
 # to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 # copies of the Software, and to permit persons to whom the Software is
 # furnished to do so, subject to the following conditions:
-# 
+#
 # The above copyright notice and this permission notice shall be included in all
 # copies or substantial portions of the Software.
-# 
+#
 # THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 # IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 # FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -24,17 +24,20 @@
 # SOFTWARE.
 
 from optparse import OptionParser
-from obo import *
-from sys import stdout
+import obo
+import sys
+
 
 def _depth(term):
     return len(list(term.ancestors()))
+
 
 def _cmp(t1, t2):
     r = _depth(t1) - _depth(t2)
     if r != 0:
         return r
-    return cmp(t1.name.value, t2.name.value)
+    return obo.cmp(t1.name.value, t2.name.value)
+
 
 class OBORenum(OptionParser):
     def __init__(self):
@@ -47,12 +50,12 @@ class OBORenum(OptionParser):
 
     def run(self):
         options, args = self.parse_args()
-        onto = Ontology()
-        onto.load_files(UnhandledTagFail(), DeprecatedTagWarn(), *args)
+        onto = obo.Ontology()
+        onto.load_files(obo.UnhandledTagFail(), obo.DeprecatedTagWarn(), obo.InvalidXRefWarn(), *args)
         onto.check_required()
-        onto.resolve_references(DanglingReferenceFail(), DanglingReferenceWarn())
+        onto.resolve_references(obo.DanglingReferenceFail(), obo.DanglingReferenceWarn())
 
-        terms = [term for term in onto.iterterms() if not(isinstance(term, BuiltinStanza) or term.source == '<<builtin>>')]
+        terms = [term for term in onto.iterterms() if not(isinstance(term, obo.BuiltinStanza) or term.source == '<<builtin>>')]
         if options.preserve:
             prefix = options.prefix + ':'
             terms = [term for term in terms if not(term.id.value.startswith(prefix))]
@@ -60,23 +63,24 @@ class OBORenum(OptionParser):
         format = '%s:%%0%dd' % (options.prefix, options.digits)
         mapping = dict((term.id.value, format % n) for n, term in enumerate(terms, options.start))
 
-        onto.write_obo(stdout)
-        for stanza in onto.stanzas.itervalues():
-            if isinstance(stanza, BuiltinStanza) or stanza.source == '<<builtin>>':
+        onto.write_obo(sys.stdout)
+        for stanza in onto.stanzas.values():
+            if isinstance(stanza, obo.BuiltinStanza) or stanza.source == '<<builtin>>':
                 continue
             if stanza.id.value in mapping:
                 stanza.id.value = mapping[stanza.id.value]
-            for links in stanza.references.itervalues():
+            for links in stanza.references.values():
                 for link in links:
                     if link.reference in mapping:
                         link.reference = mapping[link.reference]
-            stanza.write_obo(stdout)
+            stanza.write_obo(sys.stdout)
 
         if options.mapping_file is not None:
             f = open(options.mapping_file, 'w')
-            for p in mapping.iteritems():
+            for p in mapping.items():
                 f.write('%s\t%s\n' % p)
             f.close()
+
 
 if __name__ == '__main__':
     OBORenum().run()
