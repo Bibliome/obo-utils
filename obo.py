@@ -1,18 +1,18 @@
 #!/usr/bin/env python
 # MIT License
-# 
+#
 # Copyright (c) 2017 Institut National de la Recherche Agronomique
-# 
+#
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
 # in the Software without restriction, including without limitation the rights
 # to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 # copies of the Software, and to permit persons to whom the Software is
 # furnished to do so, subject to the following conditions:
-# 
+#
 # The above copyright notice and this permission notice shall be included in all
 # copies or substantial portions of the Software.
-# 
+#
 # THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 # IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 # FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -23,21 +23,23 @@
 
 
 import re
-from sys import stdin, stdout, stderr
+from sys import stdin, stderr
 from io import StringIO
-from time import strftime
-from os import getenv
 from collections import OrderedDict
+import functools
+
 
 class OBOException(Exception):
     '''Generic exception for all things OBO'''
     def __init__(self, sourced, msg):
         Exception.__init__(self, sourced.message(msg))
 
+
 class OBONotImplemented(OBOException):
     '''Exception raised when an OBO feature is not implemented here'''
     def __init__(self, sourced, tag):
         OBOException.__init__(self, sourced, tag + ' not implemented yet')
+
 
 class OBOInvalidFormat(OBOException):
     '''Exception raised when an OBO file is not well-formed'''
@@ -57,7 +59,8 @@ class UnhandledTagOption:
         tagset: tagset (e.g. Term)
         tag: tag name
         value: string value of the tag'''
-        raise NotImplemented()
+        raise NotImplementedError()
+
 
 class UnhandledTagFail(UnhandledTagOption):
     '''Unhandled tag: raise exception'''
@@ -67,6 +70,7 @@ class UnhandledTagFail(UnhandledTagOption):
     def handle(self, tagset, tag, value):
         raise OBOException(value.message('unhandled tag ' + tag))
 
+
 class UnhandledTagWarn(UnhandledTagOption):
     '''Unhandled tag: print warning and ignore'''
     def __init__(self):
@@ -75,6 +79,7 @@ class UnhandledTagWarn(UnhandledTagOption):
     def handle(self, tagset, tag, value):
         value.warning('unhandled tag ' + tag)
 
+
 class UnhandledTagRecord(UnhandledTagOption):
     '''Unhandled tag: record in 'unhandled_tags' '''
     def __init__(self):
@@ -82,6 +87,7 @@ class UnhandledTagRecord(UnhandledTagOption):
 
     def handle(self, tagset, tag, value):
         tagset.unhandled_tags.append((tag, value))
+
 
 class UnhadledTagWarnAndRecord(UnhandledTagWarn, UnhandledTagRecord):
     '''Unhandled tag: print warning and record in 'unhandled_tags' '''
@@ -93,6 +99,7 @@ class UnhadledTagWarnAndRecord(UnhandledTagWarn, UnhandledTagRecord):
         UnhandledTagWarn.handle(self, tagset, tag, value)
         UnhandledTagRecord.handle(self, tagset, tag, value)
 
+
 class UnhandledTagIgnore(UnhandledTagOption):
     '''Unhandled tag: silently ignore'''
     def __init__(self):
@@ -100,6 +107,45 @@ class UnhandledTagIgnore(UnhandledTagOption):
 
     def handle(self, tagset, tag, value):
         pass
+
+
+class InvalidXRefOption:
+    '''Abstract class that handles invalid xref'''
+    def __init__(self):
+        pass
+
+    def handle(self, tagset, tag, value):
+        '''Handles an invalid xref
+
+        :Parameters:
+        tagset: tagset (e.g. Term)
+        tag: tag name
+        value: string value of the tag'''
+        raise NotImplementedError()
+
+
+class InvalidXRefWarn(InvalidXRefOption):
+    def __init__(self):
+        InvalidXRefOption.__init__(self)
+
+    def handle(self, tagset, tag, value):
+        value.warning('invalid xref ' + value.value)
+
+
+class InvalidXRefIgnore(InvalidXRefOption):
+    def __init__(self):
+        InvalidXRefOption.__init__(self)
+
+    def handle(self, tagset, tag, value):
+        pass
+
+
+class InvalidXRefError(InvalidXRefOption):
+    def __init__(self):
+        InvalidXRefOption.__init__(self)
+
+    def handle(self, tagset, tag, value):
+        raise OBOInvalidFormat(tagset, tag)
 
 
 class DeprecatedTagOption:
@@ -114,7 +160,8 @@ class DeprecatedTagOption:
         tagset: tagset (e.g. Term)
         tag: tag name
         value: string value'''
-        raise NotImplemented()
+        raise NotImplementedError()
+
 
 class DeprecatedTagWarn(DeprecatedTagOption):
     '''Deprecated tag: print warning'''
@@ -124,6 +171,7 @@ class DeprecatedTagWarn(DeprecatedTagOption):
     def handle(self, tagset, tag, value):
         value.warning('deprecated tag: ' + tag)
 
+
 class DeprecatedTagSilent(DeprecatedTagOption):
     '''Deprecated tag: silently ignore'''
     def __init__(self):
@@ -131,7 +179,7 @@ class DeprecatedTagSilent(DeprecatedTagOption):
 
     def handle(self, tagset, tag, value):
         pass
-    
+
 
 class TagReader:
     def __init__(self, tagset, ontology, unhandled_tag_option, deprecated_tag_option):
@@ -147,10 +195,9 @@ class TagReader:
             getattr(self, method_name)(value)
         else:
             self.default_read(tag, value)
-    
+
     def default_read(self, tag, value):
         value.warning('unhandled tag ' + tag + ' in ' + self.tagset.__class__.__name__)
-
 
 
 def unquoted_string(name, phrase=False):
@@ -159,16 +206,18 @@ def unquoted_string(name, phrase=False):
         return r'(?P<' + name + r'>' + S + r'(?:\s+' + S + ')*)'
     return r'(?P<' + name + r'>' + S + ')'
 
+
 def quoted_string(name):
-    return r'"(?P<' + name + '>.*?)(?<!\\\)"'
+    return r'"(?P<' + name + r'>.*?)(?<!\\)"'
+
 
 TERMINAL_COMMENT = r'\s*(?:!.*)?$'
 SCOPE = r'(?:\s+(?P<scope>EXACT|BROAD|NARROW|RELATED))?'
 DBXREF_LIST = r'(?:\s+\[(?P<dbxrefs>(?:[^\[\]]|\\.)*)\])?'
 
 DATE_VALUE_PATTERN = re.compile(r'(?P<date>\d\d:\d\d:\d\d\d\d \d\d:\d\d)' + TERMINAL_COMMENT)
-SUBSETDEF_PATTERN = re.compile(unquoted_string('subset') + '\s+' + quoted_string('descr') + TERMINAL_COMMENT)
-SYNONYMTYPEDEF_PATTERN = re.compile(unquoted_string('name') + '\s+' + quoted_string('descr') + SCOPE + TERMINAL_COMMENT)
+SUBSETDEF_PATTERN = re.compile(unquoted_string('subset') + r'\s+' + quoted_string('descr') + TERMINAL_COMMENT)
+SYNONYMTYPEDEF_PATTERN = re.compile(unquoted_string('name') + r'\s+' + quoted_string('descr') + SCOPE + TERMINAL_COMMENT)
 FREE_VALUE_PATTERN = re.compile(r'(?P<value>(?:\\.|[^!\[\]])+)' + DBXREF_LIST + TERMINAL_COMMENT)
 BOOLEAN_VALUE_PATTERN = re.compile(r'(?P<value>true|false)' + TERMINAL_COMMENT)
 QUOTED_VALUE_PATTERN = re.compile(quoted_string('value') + TERMINAL_COMMENT)
@@ -176,9 +225,10 @@ SYNONYM_PATTERN = re.compile(quoted_string('text') + SCOPE + r'(?: ' + unquoted_
 DEPRECATED_SYNONYM_PATTERN = re.compile(quoted_string('text') + r'(?: ' + unquoted_string('type') + ')?' + DBXREF_LIST + TERMINAL_COMMENT)
 XREF_PATTERN = re.compile(unquoted_string('id') + r'(?: ' + quoted_string('descr') + r')?' + r'(?:\s+' + r'(?P<match>NO MATCH|MATCH NAME|MATCH SYNONYM)(?:\s+' + unquoted_string('matched', True) + r')?)?' + TERMINAL_COMMENT)
 INTERSECTION_PATTERN = re.compile('(?:' + unquoted_string('rel') + ' )?' + unquoted_string('id') + TERMINAL_COMMENT)
-RELATIONSHIP_PATTERN = re.compile(unquoted_string('rel') + '\s+' + unquoted_string('id') + TERMINAL_COMMENT)
-INSTANCE_PROPERTY_VALUE_PATTERN = re.compile(unquoted_string('rel') + '(?: ' + quoted_string('value') + ')?' + '\s+' + unquoted_string('ref') + TERMINAL_COMMENT)
+RELATIONSHIP_PATTERN = re.compile(unquoted_string('rel') + r'\s+' + unquoted_string('id') + TERMINAL_COMMENT)
+INSTANCE_PROPERTY_VALUE_PATTERN = re.compile(unquoted_string('rel') + '(?: ' + quoted_string('value') + ')?' + r'\s+' + unquoted_string('ref') + TERMINAL_COMMENT)
 DEFINITION_PATTERN = re.compile(quoted_string('definition') + DBXREF_LIST + TERMINAL_COMMENT)
+
 
 def match_pattern(pattern, tag, value):
     result = pattern.match(value.value)
@@ -186,34 +236,39 @@ def match_pattern(pattern, tag, value):
         raise OBOInvalidFormat(value, tag)
     return result
 
+
 def unescape(s):
-    l = []
+    sl = []
     esc = False
     for c in s:
         if esc:
             if c == 'n':
-                l.append('\n')
+                sl.append('\n')
             elif c == 't':
-                l.append('\t')
+                sl.append('\t')
             elif c == 'r':
-                l.append('\r')
+                sl.append('\r')
             else:
-                l.append(c)
+                sl.append(c)
             esc = False
         elif c == '\\':
             esc = True
         else:
-            l.append(c)
-    return ''.join(l)
+            sl.append(c)
+    return ''.join(sl)
+
 
 def get_quoted_value(tag, value):
     return match_pattern(QUOTED_VALUE_PATTERN, tag, value).group('value')
 
+
 def get_boolean_value(tag, value):
     return match_pattern(BOOLEAN_VALUE_PATTERN, tag, value).group('value') == 'true'
 
+
 def get_free_value(tag, value):
     return match_pattern(FREE_VALUE_PATTERN, tag, value).group('value').strip()
+
 
 def get_date_value(tag, value):
     return get_free_value(tag, value)
@@ -245,7 +300,7 @@ class SourcedValue(Sourced):
         Sourced.__init__(self, source, lineno)
         self.value = value
 
-        
+
 class SubsetDef(Sourced):
     def __init__(self, source, lineno, name, description):
         Sourced.__init__(self, source, lineno)
@@ -259,6 +314,7 @@ class SynonymTypeDef(Sourced):
         self.name = name
         self.description = description
         self.scope = scope
+
 
 class HeaderReader(TagReader):
     def __init__(self, ontology, unhandled_tag_option, deprecated_tag_option):
@@ -308,11 +364,12 @@ class HeaderReader(TagReader):
 
 
 class StanzaReader(Sourced, TagReader):
-    def __init__(self, source, lineno, stanza_type, ontology, unhandled_tag_option, deprecated_tag_option):
+    def __init__(self, source, lineno, stanza_type, ontology, unhandled_tag_option, deprecated_tag_option, invalid_xref_option):
         Sourced.__init__(self, source, lineno)
         TagReader.__init__(self, None, ontology, unhandled_tag_option, deprecated_tag_option)
         self.stanza_type = stanza_type
         self.stanza = None
+        self.invalid_xref_option = invalid_xref_option
 
     def read(self, tag, value):
         if tag != 'id' and self.stanza is None:
@@ -335,7 +392,7 @@ class StanzaReader(Sourced, TagReader):
         else:
             self.stanza = self.stanza_type(self.source, self.lineno, self.ontology, srcid)
         self.tagset = self.stanza
-        
+
     def read_name(self, value):
         name = unescape(get_free_value('name', value))
         if self.stanza.name is not None:
@@ -360,14 +417,17 @@ class StanzaReader(Sourced, TagReader):
 
     def read_comment(self, value):
         if self.stanza.comment is not None:
-            raise OBOException(self.stanza.comment.duplicate('comment'))
+            raise OBOException(self.stanza, self.stanza.comment.duplicate('comment'))
         self.stanza.comment = SourcedValue(value.source, value.lineno, get_free_value('comment', value))
 
     def _read_xref(self, tag, value):
         if tag != 'xref':
             self.deprecated_tag_option.handle(self.ontology, tag, value)
-        m = match_pattern(XREF_PATTERN, tag, value)
-        XRef(value.source, value.lineno, self.stanza, m.group('id'), m.group('descr'), m.group('match'), m.group('matched'))
+        try:
+            m = match_pattern(XREF_PATTERN, tag, value)
+            XRef(value.source, value.lineno, self.stanza, m.group('id'), m.group('descr'), m.group('match'), m.group('matched'))
+        except OBOInvalidFormat:
+            self.invalid_xref_option.handle(self.stanza, tag, value)
 
     def read_xref(self, value):
         self._read_xref('xref', value)
@@ -381,7 +441,7 @@ class StanzaReader(Sourced, TagReader):
 
     def _read_simple_ref(self, tag, value, rel):
         id = get_free_value(tag, value)
-        #self.stanza.lookup_reference(rel, id, remove=True)
+        # self.stanza.lookup_reference(rel, id, remove=True)
         StanzaReference(value.source, value.lineno, self.stanza, rel, id)
 
     def read_namespace(self, value):
@@ -409,8 +469,8 @@ class StanzaReader(Sourced, TagReader):
 
 
 class InstanceReader(StanzaReader):
-    def __init__(self, source, lineno, ontology, unhandled_tag_option, deprecated_tag_option):
-        StanzaReader.__init__(self, source, lineno, Instance, ontology, unhandled_tag_option, deprecated_tag_option)
+    def __init__(self, source, lineno, ontology, unhandled_tag_option, deprecated_tag_option, invalid_xref_option):
+        StanzaReader.__init__(self, source, lineno, Instance, ontology, unhandled_tag_option, deprecated_tag_option, invalid_xref_option)
 
     def read_instance_of(self, value):
         ref = get_free_value('instance_of', value)
@@ -424,8 +484,8 @@ class InstanceReader(StanzaReader):
 
 
 class TermOrTypeReader(StanzaReader):
-    def __init__(self, source, lineno, stanza_type, ontology, unhandled_tag_option, deprecated_tag_option):
-        StanzaReader.__init__(self, source, lineno, stanza_type, ontology, unhandled_tag_option, deprecated_tag_option)
+    def __init__(self, source, lineno, stanza_type, ontology, unhandled_tag_option, deprecated_tag_option, invalid_xref_option):
+        StanzaReader.__init__(self, source, lineno, stanza_type, ontology, unhandled_tag_option, deprecated_tag_option, invalid_xref_option)
 
     def read_subset(self, value):
         subset = get_free_value('subset', value)
@@ -438,14 +498,14 @@ class TermOrTypeReader(StanzaReader):
     def _read_deprecated_synonym(self, tag, value, scope):
         self.deprecated_tag_option.handle(self.ontology, tag, value)
         m = match_pattern(DEPRECATED_SYNONYM_PATTERN, tag, value)
-        type = m.group('type')
-        if type is not None:
-            if type not in self.ontology.synonymtypedef:
-                raise OBOException(value, 'undefined synonym type: ' + type)
-            default_scope = self.ontology.synonymtypedef[type].scope
+        type_ = m.group('type')
+        if type_ is not None:
+            if type_ not in self.ontology.synonymtypedef:
+                raise OBOException(value, 'undefined synonym type: ' + type_)
+            scope = self.ontology.synonymtypedef[type_].scope
         text = m.group('text')
         dbxrefs = m.group('dbxrefs')
-        Synonym(value.source, value.lineno, self.stanza, text, scope, type, dbxrefs)
+        Synonym(value.source, value.lineno, self.stanza, text, scope, type_, dbxrefs)
 
     def read_exact_synonym(self, value):
         self._read_deprecated_synonym('exact_synonym', value, 'EXACT')
@@ -482,10 +542,9 @@ class TermOrTypeReader(StanzaReader):
         self.stanza.creation_date = get_date_value('creation_date', value)
 
 
-
 class TermReader(TermOrTypeReader):
-    def __init__(self, source, lineno, ontology, unhandled_tag_option, deprecated_tag_option):
-        TermOrTypeReader.__init__(self, source, lineno, Term, ontology, unhandled_tag_option, deprecated_tag_option)
+    def __init__(self, source, lineno, ontology, unhandled_tag_option, deprecated_tag_option, invalid_xref_option):
+        TermOrTypeReader.__init__(self, source, lineno, Term, ontology, unhandled_tag_option, deprecated_tag_option, invalid_xref_option)
 
     def read_union_of(self, value):
         self._read_simple_ref('union_of', value, 'union_of')
@@ -499,12 +558,11 @@ class TermReader(TermOrTypeReader):
         if rel is None:
             rel = 'is_a'
         StanzaReference(value.source, value.lineno, self.stanza, rel, m.group('id'), collection_attribute='intersection_of')
-        
 
 
 class TypedefReader(TermOrTypeReader):
-    def __init__(self, source, lineno, ontology, unhandled_tag_option, deprecated_tag_option):
-        TermOrTypeReader.__init__(self, source, lineno, Typedef, ontology, unhandled_tag_option, deprecated_tag_option)
+    def __init__(self, source, lineno, ontology, unhandled_tag_option, deprecated_tag_option, invalid_xref_option):
+        TermOrTypeReader.__init__(self, source, lineno, Typedef, ontology, unhandled_tag_option, deprecated_tag_option, invalid_xref_option)
 
     def read_domain(self, value):
         StanzaReference(value.source, value.lineno, self.stanza, 'domain', get_free_value('domain', value))
@@ -536,8 +594,6 @@ class TypedefReader(TermOrTypeReader):
     def read_is_metadata_tag(self, value):
         self.stanza.is_metadata_tag = get_boolean_value('is_metadata_tag', value)
 
-    
-
 
 class StanzaReference(Sourced):
     def __init__(self, source, lineno, stanza, rel, reference, collection_attribute='references'):
@@ -547,14 +603,14 @@ class StanzaReference(Sourced):
         self.reference = reference
         c = getattr(stanza, collection_attribute)
         if rel in c:
-            l = c[rel]
+            lst = c[rel]
         else:
-            l = []
-            c[rel] = l
+            lst = []
+            c[rel] = lst
 #        for ref in l:
 #            if ref.reference == reference:
 #                return
-        l.append(self)
+        lst.append(self)
 
     def resolve_reference(self, rel_object, dangling_reference_option, obsolete_reference_option):
         if rel_object is not None:
@@ -562,10 +618,11 @@ class StanzaReference(Sourced):
         if self.reference in self.stanza.ontology.stanzas:
             self.reference_object = self.stanza.ontology.stanzas[self.reference]
             if obsolete_reference_option is not None and self.reference_object.is_obsolete:
-               obsolete_reference_option.handle(self, self.reference, 'reference to obsolete ') 
-               # XXX check range
+                obsolete_reference_option.handle(self, self.reference, 'reference to obsolete ')
+                # XXX check range
         else:
             dangling_reference_option.handle(self, self.reference, 'reference to unknown ')
+
 
 class XRef(Sourced):
     def __init__(self, source, lineno, term, reference, description, match, matched):
@@ -576,6 +633,7 @@ class XRef(Sourced):
         self.match = match
         self.matched = matched
         term.xref.append(self)
+
 
 class Synonym(Sourced):
     def __init__(self, source, lineno, stanza, text, scope, type, dbxrefs):
@@ -595,20 +653,19 @@ class Synonym(Sourced):
             return
         self.type_object = self.stanza.ontology.synonymtypedef[self.type]
 
-
 class TagSet:
     def __init__(self):
         self.unhandled_tags = []
 
     def write_obo(self, out):
-        raise NotImplemented()
+        raise NotImplementedError()
 
     def _write_obo_triplet_attr(self, out, pred, attr, comment=None, quote=False, scope=None, dbxrefs=None):
         if hasattr(self, attr):
             self._write_obo_triplet(out, pred, getattr(self, attr), comment=comment, quote=quote, scope=scope, dbxrefs=dbxrefs)
 
     def _write_obo_triplet(self, out, pred, value, comment=None, quote=False, scope=None, dbxrefs=None):
-        if hasattr(value, '__iter__'):
+        if hasattr(value, '__iter__') and type(value) is not str:
             for v in value:
                 self._write_obo_triplet(out, pred, v, comment=comment, quote=quote, scope=scope, dbxrefs=dbxrefs)
             return
@@ -634,6 +691,7 @@ class TagSet:
             out.write(' ! %s' % comment)
         out.write('\n')
 
+
 class BuiltinStanza:
     def __init__(self, ontology, id):
         self.ontology = ontology
@@ -646,30 +704,36 @@ class BuiltinStanza:
 
     def check_required(self):
         pass
-    
+
     def write_obo(self, out):
         pass
+
 
 class BuiltinTermOrType(BuiltinStanza):
     def __init__(self, ontology):
         BuiltinStanza.__init__(self, ontology, 'OBO:TERM_OR_TYPE')
         self.is_obsolete = False
 
+
 class BuiltinTerm(BuiltinStanza):
     def __init__(self, ontology):
         BuiltinStanza.__init__(self, ontology, 'OBO:TERM')
         self.is_obsolete = False
+
 
 class BuiltinType(BuiltinStanza):
     def __init__(self, ontology):
         BuiltinStanza.__init__(self, ontology, 'OBO:TYPE')
         self.is_obsolete = False
 
+
 class BuiltinInstance(BuiltinStanza):
     def __init__(self, ontology):
         BuiltinStanza.__init__(self, ontology, 'OBO:INSTANCE')
         self.is_obsolete = False
 
+
+@functools.cmp_to_key
 def _reference_relation_comparator(a, b):
     if a == b:
         return 0
@@ -677,7 +741,8 @@ def _reference_relation_comparator(a, b):
         return -1
     if b == 'is_a':
         return 1
-    return cmp(a, b)
+    return (a > b) - (a < b)
+
 
 class Stanza(Sourced, TagSet):
     def __init__(self, source, lineno, ontology, id):
@@ -724,7 +789,7 @@ class Stanza(Sourced, TagSet):
             self._write_obo_triplet(out, 'xref', value)
 
     def _write_obo_relations(self, out):
-        for refrel in sorted(self.references, cmp=_reference_relation_comparator):
+        for refrel in sorted(self.references, key=_reference_relation_comparator):
             for ref in self.references[refrel]:
                 if hasattr(ref, 'reference_object') and hasattr(ref.reference_object, 'name'):
                     comment = ref.reference_object.name.value
@@ -764,7 +829,7 @@ class Stanza(Sourced, TagSet):
     def _resolve_relation_references(self, c, dangling_reference_option, obsolete_reference_option):
         if self.is_obsolete:
             obsolete_reference_option = None
-        for rt, refs in c.iteritems():
+        for rt, refs in c.items():
             if rt not in self.ontology.stanzas:
                 dangling_reference_option.handle(self, rt)
                 rt_object = None
@@ -792,12 +857,12 @@ class Stanza(Sourced, TagSet):
         return None
 
     def parents(self, rel='is_a'):
-        if rel in  self.references:
+        if rel in self.references:
             for link in self.references[rel]:
                 yield link.reference_object
 
     def children(self, rel='is_a'):
-        for stanza in self.ontology.stanzas.itervalues():
+        for stanza in self.ontology.stanzas.values():
             if isinstance(stanza, BuiltinStanza):
                 continue
             for p in stanza.parents():
@@ -830,6 +895,7 @@ class Stanza(Sourced, TagSet):
         except RuntimeError:
             raise OBOException(self, 'cycle for %s (%s)?' % (self.id.value, self.name.value))
 
+
 class TermOrType(Stanza):
     def __init__(self, source, lineno, ontology, id):
         Stanza.__init__(self, source, lineno, ontology, id)
@@ -844,6 +910,7 @@ class TermOrType(Stanza):
             else:
                 self.subset_objects.append(self.ontology.subsetdef[s])
 
+
 class Term(TermOrType):
     def __init__(self, source, lineno, ontology, id):
         TermOrType.__init__(self, source, lineno, ontology, id)
@@ -855,6 +922,7 @@ class Term(TermOrType):
 
     def obo_header(self):
         return 'Term'
+
 
 class Typedef(TermOrType):
     def __init__(self, source, lineno, ontology, id):
@@ -878,7 +946,8 @@ class DanglingReferenceOption:
         pass
 
     def handle(self, sourced, ref, msg):
-        raise NotImplemented()
+        raise NotImplementedError()
+
 
 class DanglingReferenceFail(DanglingReferenceOption):
     def __init__(self):
@@ -887,6 +956,7 @@ class DanglingReferenceFail(DanglingReferenceOption):
     def handle(self, sourced, ref, msg):
         raise OBOException(sourced, msg + str(ref))
 
+
 class DanglingReferenceIgnore(DanglingReferenceOption):
     def __init__(self):
         DanglingReferenceOption.__init__(self)
@@ -894,12 +964,14 @@ class DanglingReferenceIgnore(DanglingReferenceOption):
     def handle(self, sourced, ref, msg):
         pass
 
+
 class DanglingReferenceWarn(DanglingReferenceOption):
     def __init__(self):
         DanglingReferenceOption.__init__(self)
 
     def handle(self, sourced, ref, msg):
         sourced.warning(msg + ref)
+
 
 class DanglingReferenceWarnAndIgnore(DanglingReferenceWarn, DanglingReferenceIgnore):
     def __init__(self):
@@ -910,26 +982,29 @@ class DanglingReferenceWarnAndIgnore(DanglingReferenceWarn, DanglingReferenceIgn
         DanglingReferenceWarn.handle(self, sourced, ref, msg)
         DanglingReferenceIgnore.handle(self, sourced, ref, msg)
 
-STANZA_TYPE_PATTERN = re.compile('\[(?P<stanza_type>\S+)\]' + TERMINAL_COMMENT)
+
+STANZA_TYPE_PATTERN = re.compile(r'\[(?P<stanza_type>\S+)\]' + TERMINAL_COMMENT)
 TAG_VALUE_PATTERN = re.compile('(?P<tag>(?:[^:]|\\.)+):(?P<value>.*)')
+
 
 class OntologyReader:
     def __init__(self, ontology):
         self.ontology = ontology
         self.header_reader = HeaderReader(ontology, None, None)
         self.stanza_readers = {
-            'Term': TermReader(None, 0, ontology, None, None),
-            'Typedef': TypedefReader(None, 0, ontology, None, None),
-            'Instance': InstanceReader(None, 0, ontology, None, None)
-            }
+            'Term': TermReader(None, 0, ontology, None, None, None),
+            'Typedef': TypedefReader(None, 0, ontology, None, None, None),
+            'Instance': InstanceReader(None, 0, ontology, None, None, None)
+        }
 
-    def read(self, source, file, unhandled_tag_option, deprecated_tag_option):
+    def read(self, source, file, unhandled_tag_option, deprecated_tag_option, invalid_xref_option):
         current_reader = self.header_reader
         current_reader.unhandled_tag_option = unhandled_tag_option
         current_reader.deprecated_tag_option = deprecated_tag_option
-        for r in self.stanza_readers.itervalues():
+        for r in self.stanza_readers.values():
             r.unhandled_tag_option = unhandled_tag_option
             r.deprecated_tag_option = deprecated_tag_option
+            r.invalid_xref_option = invalid_xref_option
         lineno = 0
         for line in file:
             lineno += 1
@@ -955,9 +1030,6 @@ class OntologyReader:
             value = m.group('value').strip()
             current_reader.read(tag, SourcedValue(source, lineno, value))
 
-
-
-        
 
 BUILTIN = u'''[Typedef]
 id: is_a
@@ -1017,9 +1089,6 @@ def: "Indicates the domain (type of source) of a relation"
 '''
 
 
-
-
-
 class Ontology(TagSet):
     def __init__(self):
         TagSet.__init__(self)
@@ -1034,8 +1103,8 @@ class Ontology(TagSet):
         self.saved_by = None
         self.auto_generated_by = None
         self.default_namespace = None
-        OntologyReader(self).read('<<builtin>>', StringIO(BUILTIN), UnhandledTagFail(), DeprecatedTagWarn())
-        self.builtin_relations = set(r.id.value for r in self.stanzas.itervalues() if (r.source == '<<builtin>>'))
+        OntologyReader(self).read('<<builtin>>', StringIO(BUILTIN), UnhandledTagFail(), DeprecatedTagWarn(), InvalidXRefWarn())
+        self.builtin_relations = set(r.id.value for r in self.stanzas.values() if (r.source == '<<builtin>>'))
         BuiltinType(self)
         BuiltinInstance(self)
         BuiltinTerm(self)
@@ -1047,18 +1116,18 @@ class Ontology(TagSet):
         self._write_obo_triplet(out, 'date', self.date)
         self._write_obo_triplet(out, 'saved-by', self.saved_by)
         self._write_obo_triplet(out, 'auto-generated-by', self.auto_generated_by)
-        for subset in self.subsetdef.itervalues():
+        for subset in self.subsetdef.values():
             self._write_obo_triplet(out, 'subsetdef', '%s "%s"' % (subset.name, subset.description))
-        for syntype in self.synonymtypedef.itervalues():
+        for syntype in self.synonymtypedef.values():
             self._write_obo_triplet(out, 'synonymtypedef', '%s "%s" %s' % (syntype.name, syntype.description, syntype.scope))
         self._write_obo_triplet(out, 'default-namespace', self.default_namespace)
         self._write_obo_triplet(out, 'remark', self.remark)
 
-    def load_files(self, unhandled_tag_option, deprecated_tag_option, *filenames):
+    def load_files(self, unhandled_tag_option, deprecated_tag_option, invalid_xref_option, *filenames):
         reader = OntologyReader(self)
         for fn in filenames:
             f = open(fn)
-            reader.read(fn, f, unhandled_tag_option, deprecated_tag_option)
+            reader.read(fn, f, unhandled_tag_option, deprecated_tag_option, invalid_xref_option)
             f.close()
 
     def load_stdin(self, unhandled_tag_option, deprecated_tag_option):
@@ -1066,23 +1135,24 @@ class Ontology(TagSet):
         reader.read('<<stdin>>', stdin, unhandled_tag_option, deprecated_tag_option)
 
     def resolve_references(self, dangling_reference_option, obsolete_reference_option):
-        for s in self.stanzas.itervalues():
+        for s in self.stanzas.values():
             s.resolve_references(dangling_reference_option, obsolete_reference_option)
 
     def check_required(self):
-        for s in self.stanzas.itervalues():
+        for s in self.stanzas.values():
             s.check_required()
 
     def iterterms(self):
-        for term in self.stanzas.itervalues():
+        for term in self.stanzas.values():
             if isinstance(term, Term):
                 yield term
 
     def iter_user_stanzas(self):
-        for stanza in self.stanzas.itervalues():
+        for stanza in self.stanzas.values():
             if isinstance(stanza, BuiltinStanza) or stanza.source == '<<builtin>>':
                 continue
             yield stanza
+
 
 if __name__ == '__main__':
     onto = Ontology()
