@@ -2,19 +2,19 @@
 
 
 # MIT License
-# 
+#
 # Copyright (c) 2017 Institut National de la Recherche Agronomique
-# 
+#
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
 # in the Software without restriction, including without limitation the rights
 # to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 # copies of the Software, and to permit persons to whom the Software is
 # furnished to do so, subject to the following conditions:
-# 
+#
 # The above copyright notice and this permission notice shall be included in all
 # copies or substantial portions of the Software.
-# 
+#
 # THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 # IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 # FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -24,14 +24,8 @@
 # SOFTWARE.
 
 from optparse import OptionParser
-from obo import *
-from sys import stdout
-
-
-
-
-
-
+import obo
+import sys
 
 
 class OBOSubtree(OptionParser):
@@ -67,10 +61,10 @@ class OBOSubtree(OptionParser):
 
     def run(self):
         options, args = self.parse_args()
-        onto = Ontology()
-        onto.load_files(UnhandledTagFail(), DeprecatedTagWarn(), *args)
+        onto = obo.Ontology()
+        onto.load_files(obo.UnhandledTagFail(), obo.DeprecatedTagWarn(), obo.InvalidXRefWarn(), *args)
         onto.check_required()
-        onto.resolve_references(DanglingReferenceFail(), DanglingReferenceWarn())
+        onto.resolve_references(obo.DanglingReferenceFail(), obo.DanglingReferenceWarn())
 
         if options.excluded_roots is None:
             excluded_roots = set()
@@ -90,11 +84,12 @@ class OBOSubtree(OptionParser):
         for term in excluded_terms:
             del onto.stanzas[term.id.value]
 
-        onto.write_obo(stdout)
-        for stanza in onto.stanzas.itervalues():
-            if isinstance(stanza, BuiltinStanza) or stanza.source == '<<builtin>>':
+        onto.write_obo(sys.stdout)
+        for stanza in onto.stanzas.values():
+            if isinstance(stanza, obo.BuiltinStanza) or stanza.source == '<<builtin>>':
                 continue
-            stanza.write_obo(stdout)
+            stanza.write_obo(sys.stdout)
+
 
 if __name__ == '__main__':
     OBOSubtree().run()
