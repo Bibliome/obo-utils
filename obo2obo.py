@@ -2,19 +2,19 @@
 
 
 # MIT License
-# 
-# Copyright (c) 2017 Institut National de la Recherche Agronomique
-# 
+#
+# Copyright (c) 2017-2023 Institut national de recherche pour l’agriculture, l’alimentation et l’environnement (Inrae)
+#
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
 # in the Software without restriction, including without limitation the rights
 # to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 # copies of the Software, and to permit persons to whom the Software is
 # furnished to do so, subject to the following conditions:
-# 
+#
 # The above copyright notice and this permission notice shall be included in all
 # copies or substantial portions of the Software.
-# 
+#
 # THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 # IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 # FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -23,24 +23,28 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+
 from optparse import OptionParser
-from obo import *
+import obo
 from sys import stdout
+
 
 def stanza_type_weight(stanza):
     t = stanza.__class__
-    if t == Term:
+    if t == obo.Term:
         return 1
-    if t == Typedef:
+    if t == obo.Typedef:
         return 2
-    if t == Instance:
+    if t == obo.Instance:
         return 3
     return 0
+
 
 def _get_value(v):
     if hasattr(v, 'value'):
         return v.value
     return v
+
 
 def stanza_comparator(attr):
     def result(a, b):
@@ -50,8 +54,19 @@ def stanza_comparator(attr):
             return twa - twb
         aa = _get_value(getattr(a, attr))
         ab = _get_value(getattr(b, attr))
-        return cmp(aa, ab)
+        if aa == ab:
+            return 0
+        if aa < ab:
+            return -1
+        return 1
     return result
+
+
+def stanza_sort_key(attr):
+    if attr is None:
+        return stanza_type_weight
+    return lambda x: (stanza_type_weight(x), getattr(x, attr, x))
+
 
 class OBO2OBO(OptionParser):
     def __init__(self):
@@ -65,28 +80,29 @@ class OBO2OBO(OptionParser):
 
     def run(self):
         options, args = self.parse_args()
-        onto = Ontology()
-        onto.load_files(UnhandledTagFail(), DeprecatedTagWarn(), *args)
+        onto = obo.Ontology()
+        onto.load_files(obo.UnhandledTagFail(), obo.DeprecatedTagWarn(), obo.InvalidXRefWarn(), *args)
         onto.check_required()
         if options.include_obsolete:
-            obsolete_reference_option = DanglingReferenceWarn()
+            obsolete_reference_option = obo.DanglingReferenceWarn()
         else:
-            obsolete_reference_option = DanglingReferenceFail()
-        onto.resolve_references(DanglingReferenceFail(), obsolete_reference_option)
+            obsolete_reference_option = obo.DanglingReferenceFail()
+        onto.resolve_references(obo.DanglingReferenceFail(), obsolete_reference_option)
         onto.write_obo(stdout)
-        stanzas = list(onto.stanzas.itervalues())
-        stanzas.sort(cmp=stanza_comparator(options.sort_by))
+        stanzas = list(onto.stanzas.values())
+        stanzas.sort(key=stanza_sort_key(options.sort_by))
+        # stanzas.sort(cmp=stanza_comparator(options.sort_by))
         synonym_sources = set(args[i] for i in options.synonyms_from)
         isa_sources = set(args[i] for i in options.isa_from)
         name_sources = set(args[i] for i in options.name_from)
         for stanza in stanzas:
             if stanza.is_obsolete and not options.include_obsolete:
                 continue
-            if isinstance(stanza, BuiltinStanza):
+            if isinstance(stanza, obo.BuiltinStanza):
                 continue
             if stanza.source == '<<builtin>>':
                 continue
-            if isinstance(stanza, Term) and name_sources and stanza.name.source not in name_sources:
+            if isinstance(stanza, obo.Term) and name_sources and stanza.name.source not in name_sources:
                 stanza.is_obsolete = True
             if synonym_sources:
                 stanza.synonyms[:] = [s for s in stanza.synonyms if (s.source in synonym_sources)]
@@ -94,6 +110,7 @@ class OBO2OBO(OptionParser):
                 stanza.references['is_a'][:] = [r for r in stanza.references['is_a'] if (r.source in isa_sources)]
             stanza.write_obo(stdout)
         stdout.write('\n')
+
 
 if __name__ == '__main__':
     OBO2OBO().run()

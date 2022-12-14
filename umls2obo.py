@@ -2,19 +2,19 @@
 
 
 # MIT License
-# 
-# Copyright (c) 2017 Institut National de la Recherche Agronomique
-# 
+#
+# Copyright (c) 2017-2023 Institut national de recherche pour l’agriculture, l’alimentation et l’environnement (Inrae)
+#
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
 # in the Software without restriction, including without limitation the rights
 # to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 # copies of the Software, and to permit persons to whom the Software is
 # furnished to do so, subject to the following conditions:
-# 
+#
 # The above copyright notice and this permission notice shall be included in all
 # copies or substantial portions of the Software.
-# 
+#
 # THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 # IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 # FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -23,11 +23,10 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-from obo import *
+import obo
 from argparse import ArgumentParser, RawDescriptionHelpFormatter
 from sys import stdout, stderr, argv
-import re 
-import datetime
+import re
 from os import getenv
 from datetime import datetime
 
@@ -66,6 +65,7 @@ EPILOG = '''* Filter labels by language (english):
   --relation-filter SAB SNOMED_CT,RXNORM
 '''
 
+
 class UMLS2OBO(ArgumentParser):
     def __init__(self):
         ArgumentParser.__init__(self, description='convert UMLS MR files into OBO', epilog=EPILOG, formatter_class=RawDescriptionHelpFormatter)
@@ -94,13 +94,13 @@ class UMLS2OBO(ArgumentParser):
         }
         self.aui2cui = {}
         self.relations = ()
-        self.onto = Ontology()
+        self.onto = obo.Ontology()
         self.in_cycle = set()
         self.no_cycle = set()
-        header_reader = HeaderReader(self.onto, UnhandledTagFail(), DeprecatedTagWarn())
-        header_reader.read_date(SourcedValue('<cmdline>', 0, datetime.now().strftime('%d:%m:%Y %H:%M')))
-        header_reader.read_auto_generated_by(SourcedValue('<cmdline>', 0, ' '.join(argv)))
-        header_reader.read_saved_by(SourcedValue('<cmdline>', 0, getenv('USER')))
+        header_reader = obo.HeaderReader(self.onto, obo.UnhandledTagFail(), obo.DeprecatedTagWarn())
+        header_reader.read_date(obo.SourcedValue('<cmdline>', 0, datetime.now().strftime('%d:%m:%Y %H:%M')))
+        header_reader.read_auto_generated_by(obo.SourcedValue('<cmdline>', 0, ' '.join(argv)))
+        header_reader.read_saved_by(obo.SourcedValue('<cmdline>', 0, getenv('USER')))
 
     @staticmethod
     def filter_in_list(values):
@@ -118,7 +118,7 @@ class UMLS2OBO(ArgumentParser):
         if neg:
             return (lambda x: x not in values)
         return (lambda x: x in values)
-        
+
     def mr_read(self, args, filename):
         path = '/'.join((args.umls_dir, filename))
         stderr.write('reading %s\n' % path)
@@ -145,7 +145,7 @@ class UMLS2OBO(ArgumentParser):
                 stderr.write('\n  malformed line %d\n' % n)
                 return False
         return True
-    
+
     def _load_columns(self, args):
         for n, cols in self.mr_read(args, MRFILES):
             filename = cols[0]
@@ -160,7 +160,7 @@ class UMLS2OBO(ArgumentParser):
             if m is not None:
                 return True
         return False
-    
+
     def _load_terms(self, args):
         nt = 0
         current = None
@@ -180,11 +180,11 @@ class UMLS2OBO(ArgumentParser):
                     elif current.name is None:
                         if current.synonyms:
                             syn = current.synonyms.pop(0)
-                            current.name = SourcedValue(MRCONSO, syn.lineno, syn.text)
+                            current.name = obo.SourcedValue(MRCONSO, syn.lineno, syn.text)
                         else:
                             del self.onto.stanzas[current.id.value]
                             nt -= 1
-                current = Term(MRCONSO, n, self.onto, SourcedValue(MRCONSO, n, cui))
+                current = obo.Term(MRCONSO, n, self.onto, obo.SourcedValue(MRCONSO, n, cui))
                 nt += 1
                 sources = set()
                 forms = set()
@@ -195,9 +195,9 @@ class UMLS2OBO(ArgumentParser):
             if self._exclude(args, form):
                 continue
             if cols[2] == 'P':
-                current.name = SourcedValue(MRCONSO, n, form)
+                current.name = obo.SourcedValue(MRCONSO, n, form)
             elif args.keep_duplicate_synonyms or form not in forms:
-                Synonym(MRCONSO, n, current, form, 'EXACT', None, '')
+                obo.Synonym(MRCONSO, n, current, form, 'EXACT', None, '')
             forms.add(form)
         stderr.write('  line % 9d, % 7d terms\n' % (n, nt))
 
@@ -215,7 +215,7 @@ class UMLS2OBO(ArgumentParser):
             if r.reference == ref:
                 return True
         return False
-        
+
     def _load_relations(self, args):
         nr = 0
         for n, cols in self.mr_read(args, MRREL):
@@ -231,14 +231,14 @@ class UMLS2OBO(ArgumentParser):
             if rel is None:
                 continue
             if lid == rid:
-                #stderr.write('\n  relation with self (%s) line %d\n' % (lid, n))
+                # stderr.write('\n  relation with self (%s) line %d\n' % (lid, n))
                 continue
             term = self.onto.stanzas[lid]
             if not UMLS2OBO._has_ref(term, rel, rid):
-                StanzaReference(MRREL, n, term, rel, rid)
+                obo.StanzaReference(MRREL, n, term, rel, rid)
                 nr += 1
         stderr.write('  line % 9d, % 7d relations\n' % (n, nr))
-        
+
     def _create_filter(self, filename, col, values):
         try:
             col = int(col)
@@ -266,7 +266,7 @@ class UMLS2OBO(ArgumentParser):
             path = tuple((cui, self.onto.stanzas[cui]) for cui in cui_path if cui in self.onto.stanzas)
             for cui, parent in reversed(path):
                 if term.id.value != cui and not UMLS2OBO._has_ref(term, args.hierarchy, cui):
-                    StanzaReference(MRHIER, n, term, args.hierarchy, cui)
+                    obo.StanzaReference(MRHIER, n, term, args.hierarchy, cui)
                     nr += 1
                     break
                 term = parent
@@ -293,12 +293,12 @@ class UMLS2OBO(ArgumentParser):
                             yield cycle
             else:
                 self.no_cycle.update(path)
-                
+
     def run(self):
         args = self.parse_args()
         if len(args.obo) > 0:
             stderr.write('loading OBO files\n')
-            self.onto.load_files(UnhandledTagFail(), DeprecatedTagWarn(), *args.obo)
+            self.onto.load_files(obo.UnhandledTagFail(), obo.DeprecatedTagWarn(), *args.obo)
         self._load_columns(args)
         self.filters[MRCONSO] = tuple((self._col(MRCONSO, col), UMLS2OBO.filter_in_list(values)) for col, values in args.filters)
         if args.sources is not None:
@@ -335,18 +335,19 @@ class UMLS2OBO(ArgumentParser):
                 else:
                     break
         for rel, id, name in args.roots:
-            sourced_id = SourcedValue('<cmdline>', 0, id)
-            root = Term('<cmdline>', 0, self.onto, sourced_id)
-            root.name = SourcedValue('<cmdline>', 0, name)
+            sourced_id = obo.SourcedValue('<cmdline>', 0, id)
+            root = obo.Term('<cmdline>', 0, self.onto, sourced_id)
+            root.name = obo.SourcedValue('<cmdline>', 0, name)
             for term in self.onto.iterterms():
                 if rel not in term.references and term.id.value != id:
-                    StanzaReference('<cmdline>', 0, term, rel, id)
+                    obo.StanzaReference('<cmdline>', 0, term, rel, id)
         stderr.write('resolving references\n')
-        self.onto.resolve_references(DanglingReferenceFail(), DanglingReferenceFail())
+        self.onto.resolve_references(obo.DanglingReferenceFail(), obo.DanglingReferenceFail())
         stderr.write('writing OBO\n')
         self.onto.write_obo(stdout)
         for term in self.onto.iterterms():
             term.write_obo(stdout)
+
 
 if __name__ == '__main__':
     UMLS2OBO().run()

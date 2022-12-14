@@ -3,7 +3,7 @@
 
 # MIT License
 #
-# Copyright (c) 2017 Institut National de la Recherche Agronomique
+# Copyright (c) 2017-2023 Institut national de recherche pour l’agriculture, l’alimentation et l’environnement (Inrae)
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -92,11 +92,11 @@ class ValueMap(object):
 
 
 def iter_terms(onto):
-    return ((term, term) for term in onto.stanzas.itervalues() if isinstance(term, obo.Term))
+    return ((term, term) for term in onto.stanzas.values() if isinstance(term, obo.Term))
 
 
 def iter_term_synonyms(onto):
-    for term in onto.stanzas.itervalues():
+    for term in onto.stanzas.values():
         if isinstance(term, obo.Term):
             yield term, term
             for syn in term.synonyms:
@@ -104,14 +104,14 @@ def iter_term_synonyms(onto):
 
 
 def iter_term_paths(onto):
-    for term in onto.stanzas.itervalues():
+    for term in onto.stanzas.values():
         if isinstance(term, obo.Term):
             for path in term.paths(include_self=True):
                 yield path, term
 
 
 def iter_term_xrefs(onto):
-    for term in onto.stanzas.itervalues():
+    for term in onto.stanzas.values():
         if isinstance(term, obo.Term):
             for xref in term.xref:
                 yield xref, term

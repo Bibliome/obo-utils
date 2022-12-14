@@ -1,19 +1,19 @@
 #!/usr/bin/python
 
 # MIT License
-# 
-# Copyright (c) 2017 Institut National de la Recherche Agronomique
-# 
+#
+# Copyright (c) 2017-2023 Institut national de recherche pour l’agriculture, l’alimentation et l’environnement (Inrae)
+#
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
 # in the Software without restriction, including without limitation the rights
 # to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 # copies of the Software, and to permit persons to whom the Software is
 # furnished to do so, subject to the following conditions:
-# 
+#
 # The above copyright notice and this permission notice shall be included in all
 # copies or substantial portions of the Software.
-# 
+#
 # THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 # IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 # FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -23,7 +23,8 @@
 # SOFTWARE.
 
 from optparse import OptionParser
-from obo import Ontology, OntologyReader, UnhandledTagFail, DanglingReferenceFail, DanglingReferenceWarn, DeprecatedTagSilent
+from obo import Ontology, UnhandledTagFail, DanglingReferenceFail, DanglingReferenceWarn, DeprecatedTagSilent
+
 
 class Wang_Normalization(dict):
     def __init__(self, ontology, weight):
@@ -50,12 +51,12 @@ class Wang_Normalization(dict):
     def value(self, term):
         if term not in self:
             return 0
-        return sum((self.weight ** depth) for depth in self[term].itervalues())
+        return sum((self.weight ** depth) for depth in self[term].values())
 
     def s_values(self, term):
         if term not in self:
             return {}
-        return dict((t, (self.weight ** d)) for t, d in self[term].iteritems())
+        return dict((t, (self.weight ** d)) for t, d in self[term].items())
 
     def term_similarity(self, term1, term2):
         if term1 not in self:
@@ -84,7 +85,7 @@ class Wang(OptionParser):
         self.add_option('--print-names', action='store_true', dest='print_names', help='print term names')
         self.add_option('--weight', action='store', type='float', dest='weight', help='ancestor weight (default: %default)')
         self.add_option('--symmetric', action='store_true', dest='symmetric', help='print symmetric matrix')
-    
+
     def run(self):
         options, args = self.parse_args()
         onto = Ontology()
@@ -94,17 +95,18 @@ class Wang(OptionParser):
         wang = Wang_Normalization(onto, options.weight)
         terms = tuple(t for t in onto.iterterms())
         for i, termA in enumerate(terms):
-            for j in xrange(i, len(terms)):
+            for j in range(i, len(terms)):
                 termB = terms[j]
                 d = wang.term_similarity(termA, termB)
                 if options.print_names:
-                    print '%s\t%s\t%s\t%s\t%f' % (termA.id.value, termA.name.value, termB.id.value, termB.name.value, d)
+                    print('%s\t%s\t%s\t%s\t%f' % (termA.id.value, termA.name.value, termB.id.value, termB.name.value, d))
                     if options.symmetric and i != j:
-                        print '%s\t%s\t%s\t%s\t%f' % (termB.id.value, termB.name.value, termA.id.value, termA.name.value, d)
+                        print('%s\t%s\t%s\t%s\t%f' % (termB.id.value, termB.name.value, termA.id.value, termA.name.value, d))
                 else:
-                    print '%s\t%s\t%f' % (termA.id.value, termB.id.value, d)
+                    print('%s\t%s\t%f' % (termA.id.value, termB.id.value, d))
                     if options.symmetric and i != j:
-                        print '%s\t%s\t%f' % (termB.id.value, termA.id.value, d)
+                        print('%s\t%s\t%f' % (termB.id.value, termA.id.value, d))
+
 
 if __name__ == '__main__':
     Wang().run()

@@ -2,19 +2,19 @@
 
 
 # MIT License
-# 
-# Copyright (c) 2017 Institut National de la Recherche Agronomique
-# 
+#
+# Copyright (c) 2017-2023 Institut national de recherche pour l’agriculture, l’alimentation et l’environnement (Inrae)
+#
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
 # in the Software without restriction, including without limitation the rights
 # to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 # copies of the Software, and to permit persons to whom the Software is
 # furnished to do so, subject to the following conditions:
-# 
+#
 # The above copyright notice and this permission notice shall be included in all
 # copies or substantial portions of the Software.
-# 
+#
 # THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 # IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 # FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -24,8 +24,8 @@
 # SOFTWARE.
 
 from scipy.stats.distributions import chi2
-from obo import *
-from sys import argv, stdout, stderr
+import obo
+import sys
 from collections import defaultdict
 from math import log
 from optparse import OptionParser
@@ -34,13 +34,16 @@ EXPECTED = 0
 OBSERVED = 1
 FREQSETS = (EXPECTED, OBSERVED)
 
+
 def xlog(msg, *args):
-    stderr.write(msg % args)
-    stderr.write('\n')
+    sys.stderr.write(msg % args)
+    sys.stderr.write('\n')
+
 
 class Count:
     def __init__(self):
         self.proper = 0
+
 
 class Hierarchy:
     def __init__(self):
@@ -67,10 +70,10 @@ class Hierarchy:
             self._obo_node(childrenmap, child, node)
 
     def read_obo(self, filename, rootid):
-        onto = Ontology()
-        onto.load_files(UnhandledTagFail(), DeprecatedTagWarn(), filename)
+        onto = obo.Ontology()
+        onto.load_files(obo.UnhandledTagFail(), obo.DeprecatedTagWarn(), filename)
         onto.check_required()
-        onto.resolve_references(DanglingReferenceFail(), DanglingReferenceWarn())
+        onto.resolve_references(obo.DanglingReferenceFail(), obo.DanglingReferenceWarn())
         childrenmap = defaultdict(list)
         for term in onto.iterterms():
             for par in term.parents():
@@ -85,6 +88,7 @@ class Hierarchy:
             if id in self.node_map:
                 self.node_map[id].counts[c].proper += int(count)
         f.close()
+
 
 class Node:
     def __init__(self, id, name=''):
@@ -118,14 +122,18 @@ class Node:
     def expected(self):
         return self.counts[EXPECTED].cumul
 
+
 def delta_chi2(exp, obs):
     return ((obs - exp) ** 2) / exp
-        
+
+
 def delta_g(exp, obs):
     return 2 * obs * log(obs / exp)
 
+
 def delta_nil(exp, obs):
     return 0
+
 
 class Chi2Cell:
     def __init__(self, ratio, deltafun, child):
@@ -137,18 +145,14 @@ class Chi2Cell:
         self.pvalue = 1.0
 
     def set_direction(self):
-        self.direction = cmp(self.observed, self.expected)
+        if self.observed > self.expected:
+            self.direction = 1
+        elif self.observed == self.expected:
+            self.direction = 0
+        else:
+            self.direction = -1
 
-class RealChi2Cell:
-    def __init__(self, child, expected, observed, delta, direction, pvalue):
-        self.child = child
-        self.expected = expected
-        self.observed = observed
-        self.delta = delta
-        self.direction = direction
-        self.pvalue = pvalue
-        
-        
+
 def test_children_chi2(node, threshold, deltafun, depth=0):
     children = tuple(child for child in node.children if child.expected() > 0)
     result = []
@@ -178,6 +182,7 @@ def test_children_chi2(node, threshold, deltafun, depth=0):
             for r in test_children_chi2(child, threshold, deltafun, depth - 1):
                 yield r
 
+
 class HStat(OptionParser):
     def __init__(self):
         OptionParser.__init__(self, usage='usage: %prog --obo FILE --root ID --expected FILE --observed FILE [options]')
@@ -189,7 +194,7 @@ class HStat(OptionParser):
         self.add_option('--depth', action='store', type='int', dest='depth', help='maximum depth of tested nodes (default: %default)')
         self.add_option('--g-test', action='store_const', const=delta_g, dest='deltafun', help='use G-test instead of regular chi-squared difference formula')
         self.add_option('--risk', action='store', type='float', dest='risk', help='null hypothesis rejection risk (default: %default)')
-        
+
     def run(self):
         options, args = self.parse_args()
         if len(args):
@@ -207,13 +212,12 @@ class HStat(OptionParser):
         hierarchy.read_frequencies(options.expected, EXPECTED)
         hierarchy.read_frequencies(options.observed, OBSERVED)
         hierarchy.root.cumulate()
-        print 'ID\tDIRECTION\tDELTA\tOBSERVED\tEXPECTED\tCHILD-EXPECTED\tP-VALUE\tNAME'
+        print('ID\tDIRECTION\tDELTA\tOBSERVED\tEXPECTED\tCHILD-EXPECTED\tP-VALUE\tNAME')
         for cells in test_children_chi2(hierarchy.root, options.risk, options.deltafun, options.depth):
             for cell in cells:
-                print '%s\t% 2d\t%15.6f\t%8d\t%15.6f\t%8d\t%f\t%s' % (cell.child.id, cell.direction, cell.delta, cell.observed, cell.expected, cell.child.expected(), cell.pvalue, cell.child.name)
+                print('%s\t% 2d\t%15.6f\t%8d\t%15.6f\t%8d\t%f\t%s' % (cell.child.id, cell.direction, cell.delta, cell.observed, cell.expected, cell.child.expected(), cell.pvalue, cell.child.name))
             print
-        
 
-        
+
 if __name__ == '__main__':
     HStat().run()

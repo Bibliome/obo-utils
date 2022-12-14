@@ -1,19 +1,19 @@
 #!/usr/bin/python
 
 # MIT License
-# 
-# Copyright (c) 2017 Institut National de la Recherche Agronomique
-# 
+#
+# Copyright (c) 2017-2023 Institut national de recherche pour l’agriculture, l’alimentation et l’environnement (Inrae)
+#
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
 # in the Software without restriction, including without limitation the rights
 # to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 # copies of the Software, and to permit persons to whom the Software is
 # furnished to do so, subject to the following conditions:
-# 
+#
 # The above copyright notice and this permission notice shall be included in all
 # copies or substantial portions of the Software.
-# 
+#
 # THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 # IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 # FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -22,7 +22,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-from obo import *
+import obo
 from optparse import OptionParser
 
 
@@ -48,37 +48,35 @@ OWL_HEADER = '''<?xml version="1.0"?>
 OWL_FOOTER = '''</rdf:RDF>
 '''
 
+
 class OBO2OWL(OptionParser):
     def __init__(self):
         OptionParser.__init__(self, usage='usage: %prog [options]')
 
     def run(self):
         options, args = self.parse_args()
-        onto = Ontology()
-        onto.load_files(UnhandledTagFail(), DeprecatedTagWarn(), *args)
+        onto = obo.Ontology()
+        onto.load_files(obo.UnhandledTagFail(), obo.DeprecatedTagWarn(), *args)
         onto.check_required()
-        onto.resolve_references(DanglingReferenceFail())
-        print OWL_HEADER
-        for stanza in onto.stanzas.itervalues():
-            if isinstance(stanza, Term):
-                print '  <owl:Class rdf:about="%s">' % stanza.id.value
-                print '    <rdfs:label rdf:datatype="http://www.w3.org/2001/XMLSchema#string">%s</rdfs:label>' % stanza.name.value
+        onto.resolve_references(obo.DanglingReferenceFail(), obo.DanglingReferenceWarn())
+        print(OWL_HEADER)
+        for stanza in onto.stanzas.values():
+            if isinstance(stanza, obo.Term):
+                print('  <owl:Class rdf:about="%s">' % stanza.id.value)
+                print('    <rdfs:label rdf:datatype="http://www.w3.org/2001/XMLSchema#string">%s</rdfs:label>' % stanza.name.value)
                 for syn in stanza.synonyms:
                     if syn.scope == 'EXACT':
                         tag = 'synonymExact'
                     elif syn.scope == 'RELATED':
                         tag = 'synonymRelated'
-                    print '    <%s rdf:datatype="http://www.w3.org/2001/XMLSchema#string">%s</%s>' % (tag, syn.text, tag)
+                    print('    <%s rdf:datatype="http://www.w3.org/2001/XMLSchema#string">%s</%s>' % (tag, syn.text, tag))
                 if 'is_a' in stanza.references:
                     for ref in stanza.references['is_a']:
-                        print '    <rdfs:subClassOf>'
-                        print '      <owl:Class rdf:about="%s"/>' % ref.reference
-                        print '    </rdfs:subClassOf>'
-                print '  </owl:Class>'
-        print OWL_FOOTER
-
-
-
+                        print('    <rdfs:subClassOf>')
+                        print('      <owl:Class rdf:about="%s"/>' % ref.reference)
+                        print('    </rdfs:subClassOf>')
+                print('  </owl:Class>')
+        print(OWL_FOOTER)
 
 
 if __name__ == '__main__':
