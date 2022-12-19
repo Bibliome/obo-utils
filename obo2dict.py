@@ -1,9 +1,8 @@
 #!/usr/bin/env python2
 
-
 # MIT License
 #
-# Copyright (c) 2017-2023 Institut national de recherche pour l’agriculture, l’alimentation et l’environnement (Inrae)
+# Copyright (c) 2017-2023 Institut national de recherche pour l'agriculture, l'alimentation et l'environnement (Inrae)
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
