@@ -41,7 +41,7 @@ class CSV2OBO(OptionParser):
         self.add_option('--isa', action='append', type='int', dest='isa_columns', help='parent column (multiple allowed, default: no is_a)')
         self.add_option('--synonym', action='append', type='int', dest='synonym_columns', help='synonym column (multiple allowed, default: no synonym)')
         self.add_option('--definition', action='store', type='int', dest='definition_column', help='definition column, default: no definition')
-        self.add_option('--delimiter', action='store', type='string', dest='delimiter', default=',', help='field delimiter (default: tab)')
+        self.add_option('--delimiter', action='store', type='string', dest='delimiter', default='\t', help='field delimiter (default: tab)')
         self.add_option('--quote', action='store', type='string', dest='quote', default='"', help='quote character (default: ")')
         self.add_option('--skip-first', action='store_true', dest='skip_first', default=False, help='skip first record (default: do not skip)')
         self.add_option('--output', action='store', type='str', dest='output', default=None, help='output file (default: standard output)')
@@ -62,7 +62,7 @@ class CSV2OBO(OptionParser):
 
     def init_ontology(self, options):
         self.ontology = obo.Ontology()
-        header_reader = csv.HeaderReader(self.ontology, obo.UnhandledTagFail(), obo.DeprecatedTagWarn())
+        header_reader = obo.HeaderReader(self.ontology, obo.UnhandledTagFail(), obo.DeprecatedTagWarn())
         header_reader.read_date(obo.SourcedValue('<commandline>', 0, datetime.now().strftime('%d:%m:%Y %H:%M')))
         header_reader.read_auto_generated_by(obo.SourcedValue('<commandline>', 0, 'csv2obo.py'))
         header_reader.read_saved_by(obo.SourcedValue('<commandline>', 0, getenv('USER')))
@@ -86,7 +86,7 @@ class CSV2OBO(OptionParser):
     def load_record(self, options, filename, lineno, row):
         if lineno == 1 and options.skip_first:
             return
-        term_reader = obo.TermReader(filename, lineno, self.ontology, obo.UnhandledTagFail(), obo.DeprecatedTagWarn())
+        term_reader = obo.TermReader(filename, lineno, self.ontology, obo.UnhandledTagFail(), obo.DeprecatedTagWarn(), obo.InvalidXRefWarn())
         if not self.read_id(options, row, term_reader):
             return
         self.read_name(options, row, term_reader)
@@ -129,6 +129,8 @@ class CSV2OBO(OptionParser):
             term_reader.read_name(obo.SourcedValue(term_reader.source, term_reader.lineno, name))
 
     def read_def(self, options, row, term_reader):
+        if options.definition_column is None:
+            return
         definition = CSV2OBO.column(term_reader.source, term_reader.lineno, row, options.definition_column)
         if definition != '':
             # stderr.write('def = %s\n' % definition)
@@ -136,8 +138,11 @@ class CSV2OBO(OptionParser):
             term_reader.read_def(obo.SourcedValue(term_reader.source, term_reader.lineno, '"%s" [%s]' % (definition, term_reader.stanza.id.value)))
 
     def read_isas(self, options, row, term_reader):
+        if options.isa_columns is None:
+            return
         for col in options.isa_columns:
             ref = CSV2OBO.column(term_reader.source, term_reader.lineno, row, col)
+            ref = ref.split('/')[-2]  # taxid path hack
             if ref == '':
                 continue
             if ref in options.ignore_refs:
@@ -147,6 +152,8 @@ class CSV2OBO(OptionParser):
             term_reader.read_is_a(obo.SourcedValue(term_reader.source, term_reader.lineno, ref))
 
     def read_synonyms(self, options, row, term_reader):
+        if options.synonym_columns is None:
+            return
         for col in options.synonym_columns:
             syn = CSV2OBO.column(term_reader.source, term_reader.lineno, row, col)
             if syn != '':
