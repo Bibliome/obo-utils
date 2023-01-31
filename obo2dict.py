@@ -48,6 +48,12 @@ class ValueMap(object):
     def key_id(self):
         return self.stanza.id.value
 
+    def key_parent_id(self):
+        if isinstance(self.item, obo.Stanza):
+            return self.item.id.value
+        for parent in self.stanza.parents():
+            return parent.id.value
+
     def key_synonym(self):
         if isinstance(self.item, obo.Synonym):
             return self.item.text
@@ -102,6 +108,13 @@ def iter_term_synonyms(onto):
                 yield syn, term
 
 
+def iter_term_parents(onto):
+    for term in onto.stanzas.values():
+        if isinstance(term, obo.Term):
+            for parent in term.parents():
+                yield parent, term
+
+
 def iter_term_paths(onto):
     for term in onto.stanzas.values():
         if isinstance(term, obo.Term):
@@ -123,6 +136,7 @@ class OBO2Dict(OptionParser):
         self.add_option('--term-paths', action='store_const', dest='iter', const=iter_term_paths, help='iterates over term paths')
         self.add_option('--term-synonyms', action='store_const', dest='iter', const=iter_term_synonyms, help='iterates over term synonyms')
         self.add_option('--term-xrefs', action='store_const', dest='iter', const=iter_term_xrefs, help='iterates over term cross references')
+        self.add_option('--term-parents', action='store_const', dest='iter', const=iter_term_parents, help='iterates over term parents')
         self.add_option('--terms', action='store_const', dest='iter', const=iter_terms, help='iterates over terms')
         self.add_option('--pattern', action='store', type='string', dest='pattern', metavar='PATTERN', help='item output pattern (default: %default)')
 
