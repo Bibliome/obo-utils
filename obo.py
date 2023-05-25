@@ -1135,9 +1135,9 @@ class Ontology(TagSet):
             reader.read(fn, f, unhandled_tag_option, deprecated_tag_option, invalid_xref_option)
             f.close()
 
-    def load_stdin(self, unhandled_tag_option, deprecated_tag_option):
+    def load_stdin(self, unhandled_tag_option, deprecated_tag_option, invalid_xref_option):
         reader = OntologyReader(self)
-        reader.read('<<stdin>>', sys.stdin, unhandled_tag_option, deprecated_tag_option)
+        reader.read('<<stdin>>', sys.stdin, unhandled_tag_option, deprecated_tag_option, invalid_xref_option)
 
     def resolve_references(self, dangling_reference_option, obsolete_reference_option):
         for s in self.stanzas.values():
@@ -1161,6 +1161,6 @@ class Ontology(TagSet):
 
 if __name__ == '__main__':
     onto = Ontology()
-    onto.load_stdin(UnhandledTagFail(), DeprecatedTagSilent())
+    onto.load_stdin(UnhandledTagWarn(), DeprecatedTagWarn(), InvalidXRefWarn())
     onto.check_required()
-    onto.resolve_references(DanglingReferenceFail(), DanglingReferenceWarn())
+    onto.resolve_references(DanglingReferenceWarn(), DanglingReferenceWarn())
