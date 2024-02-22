@@ -24,6 +24,7 @@
 
 from optparse import OptionParser
 import obo
+import codecs
 
 
 class ValueMap(object):
@@ -147,7 +148,7 @@ class OBO2Dict(OptionParser):
         onto.check_required()
         onto.resolve_references(obo.DanglingReferenceFail(), obo.DanglingReferenceWarn())
         map = ValueMap()
-        pattern = options.pattern.decode('string_escape')
+        pattern = options.pattern.replace('\\t', '\t')
         for value in options.iter(onto):
             map.set(value)
             print(pattern % map)
