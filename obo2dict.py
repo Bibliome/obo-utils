@@ -27,6 +27,14 @@ import obo
 import codecs
 
 
+class HeaderMap(object):
+    def __init__(self):
+        pass
+
+    def __getitem__(self, item):
+        return item
+
+
 class ValueMap(object):
     def __init__(self):
         self.item = None
@@ -133,13 +141,21 @@ def iter_term_xrefs(onto):
 class OBO2Dict(OptionParser):
     def __init__(self):
         OptionParser.__init__(self, usage='usage: %prog [options]')
-        self.set_defaults(iter=iter_term_synonyms, pattern='%(synonym)s\\t%(id)s\\t%(name)s')
-        self.add_option('--term-paths', action='store_const', dest='iter', const=iter_term_paths, help='iterates over term paths')
-        self.add_option('--term-synonyms', action='store_const', dest='iter', const=iter_term_synonyms, help='iterates over term synonyms')
-        self.add_option('--term-xrefs', action='store_const', dest='iter', const=iter_term_xrefs, help='iterates over term cross references')
-        self.add_option('--term-parents', action='store_const', dest='iter', const=iter_term_parents, help='iterates over term parents')
-        self.add_option('--terms', action='store_const', dest='iter', const=iter_terms, help='iterates over terms')
-        self.add_option('--pattern', action='store', type='string', dest='pattern', metavar='PATTERN', help='item output pattern (default: %default)')
+        self.set_defaults(iter=iter_term_synonyms, pattern='%(synonym)s\\t%(id)s\\t%(name)s', header=False)
+        self.add_option('--term-paths', action='store_const', dest='iter', const=iter_term_paths,
+                        help='iterates over term paths')
+        self.add_option('--term-synonyms', action='store_const', dest='iter', const=iter_term_synonyms,
+                        help='iterates over term synonyms')
+        self.add_option('--term-xrefs', action='store_const', dest='iter', const=iter_term_xrefs,
+                        help='iterates over term cross references')
+        self.add_option('--term-parents', action='store_const', dest='iter', const=iter_term_parents,
+                        help='iterates over term parents')
+        self.add_option('--terms', action='store_const', dest='iter', const=iter_terms,
+                        help='iterates over terms')
+        self.add_option('--pattern', action='store', type='string', dest='pattern',
+                        metavar='PATTERN', help='item output pattern (default: %default)')
+        self.add_option('--header', action='store_true', dest='header',
+                        help='print header line')
 
     def run(self):
         options, args = self.parse_args()
@@ -147,11 +163,13 @@ class OBO2Dict(OptionParser):
         onto.load_files(obo.UnhandledTagFail(), obo.DeprecatedTagWarn(), obo.InvalidXRefWarn(), *args)
         onto.check_required()
         onto.resolve_references(obo.DanglingReferenceFail(), obo.DanglingReferenceWarn())
-        map = ValueMap()
         pattern = options.pattern.replace('\\t', '\t')
+        if options.header:
+            print(pattern % HeaderMap())
+        vmap = ValueMap()
         for value in options.iter(onto):
-            map.set(value)
-            print(pattern % map)
+            vmap.set(value)
+            print(pattern % vmap)
 
 
 if __name__ == '__main__':
