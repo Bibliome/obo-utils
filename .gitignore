@@ -2,3 +2,4 @@
 tests/
 *.obo
 *.owl
+.idea/
